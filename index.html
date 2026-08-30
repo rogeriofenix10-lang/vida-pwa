@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#101828">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="VIDA">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<link rel="stylesheet" href="styles.css">
+<title>VIDA — Sua vida organizada pela IA</title>
+</head>
+<body>
+<div id="splash"><div class="splash-logo">VIDA</div><div>Sua vida. Organizada pela IA.</div></div>
+<div id="auth" class="auth"><div class="auth-card"><div class="logo">VIDA</div><p>Sua vida. Organizada pela IA.</p>
+<div id="authForms">
+<div id="loginForm"><h1>Entrar</h1><input id="loginEmail" placeholder="E-mail" type="email"><input id="loginPass" placeholder="Senha" type="password"><button onclick="login()">Entrar</button><p>Não tem conta? <a onclick="toggleAuth()">Criar conta</a></p></div>
+<div id="registerForm" hidden><h1>Criar conta</h1><input id="regName" placeholder="Seu nome"><input id="regEmail" placeholder="E-mail" type="email"><input id="regPass" placeholder="Senha (mín. 6 caracteres)" type="password"><button onclick="register()">Criar conta</button><p>Já tem conta? <a onclick="toggleAuth()">Entrar</a></p></div>
+</div></div></div>
+<div id="app" hidden>
+<header><div><b>VIDA</b><small>Sua vida. Organizada pela IA.</small></div><button onclick="logout()">Sair</button></header>
+<main>
+<section id="home" class="screen active"><div class="hero"><div><small>ASSISTENTE PESSOAL</small><h1 id="hello">Olá! 👋</h1><p>O que você precisa resolver?</p></div><button class="mic" onclick="voice()">🎙️</button></div>
+<div class="stats"><div><b id="taskN">0</b><span>Tarefas</span></div><div><b id="billN">0</b><span>Contas</span></div><div><b id="docN">0</b><span>Docs</span></div></div>
+<div class="title"><h2>Radar da Vida</h2><button onclick="load()">Atualizar</button></div><div id="radar"></div></section>
+<section id="ai" class="screen"><div class="title"><h2>🤖 Assistente VIDA</h2></div><div id="chat"></div><div class="composer"><input id="msg" placeholder="Ex.: o que preciso resolver hoje?"><button onclick="send()">➤</button></div></section>
+<section id="tasks" class="screen"><div class="title"><h2>📋 Tarefas</h2><button onclick="addTask()">+ Nova</button></div><div id="tasksList"></div></section>
+<section id="docs" class="screen"><div class="title"><h2>📄 Documentos</h2><button onclick="addDoc()">+ Novo</button></div><div id="docsList"></div></section>
+<section id="more" class="screen"><div class="title"><h2>⚙️ Configurações</h2></div><div class="panel"><h3>Memória do VIDA</h3><p>Você controla o que o VIDA guarda sobre você.</p><input id="memory" placeholder="Ex.: Meu carro é um Fastback"><button onclick="saveMemory()">Salvar memória</button></div><div class="panel"><h3>💰 Contas</h3><button onclick="addBill()">Cadastrar conta</button></div></section>
+</main>
+<nav><button onclick="go('home')">🏠<span>Início</span></button><button onclick="go('ai')">🤖<span>IA</span></button><button onclick="go('tasks')">✓<span>Tarefas</span></button><button onclick="go('docs')">📄<span>Docs</span></button><button onclick="go('more')">☰<span>Mais</span></button></nav>
+</div>
+<script src="app.js"></script>
+<script>
+setTimeout(()=>document.getElementById("splash").classList.add("hide"),900);
+</script>
+</body></html>

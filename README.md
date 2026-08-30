@@ -1,0 +1,1 @@
+O frontend é um PWA instalável. Para desenvolvimento local, abra pelo servidor web do docker compose em http://localhost:8080.
