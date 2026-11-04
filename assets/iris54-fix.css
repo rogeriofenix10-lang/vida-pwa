@@ -23,3 +23,10 @@
 .iris54-modal-box{width:min(620px,100%);max-height:90vh;overflow:auto;padding:24px;border:1px solid rgba(112,155,220,.35);border-radius:18px;background:#0b1d39;color:#eff6ff}
 .iris54-modal-actions,.iris54-task-actions{display:flex;flex-wrap:wrap;gap:10px;justify-content:flex-end;margin-top:18px}
 @media(max-width:640px){.iris54-hero{min-height:620px;padding:50px 14px 70px}.iris54-central-eye{width:170px;height:170px}.iris54-ocular-eye-wrapper{width:160px;height:160px}.iris54-tagline{font-size:2.25rem}.iris54-command-bar{padding:8px}.iris54-feature-grid,.iris54-footer-cards,.iris54-stats-grid,.iris54-task-grid{grid-template-columns:1fr;padding:14px}}
+
+/* Floating brand must remain a compact badge, not a second hero eye */
+.iris54-floating-brand{position:fixed!important;top:16px!important;left:16px!important;z-index:80!important;display:flex!important;align-items:center!important;gap:10px!important;width:auto!important;height:auto!important;padding:7px 11px!important;border:1px solid rgba(112,155,220,.28)!important;border-radius:14px!important;background:rgba(5,18,40,.82)!important;box-shadow:0 8px 24px rgba(0,0,0,.25)!important}
+.iris54-floating-brand .iris54-brand-eye-real,.iris54-brand-eye-real{display:block!important;width:42px!important;height:42px!important;max-width:42px!important;max-height:42px!important;object-fit:contain!important;border-radius:50%!important;flex:none!important}
+.iris54-floating-brand img{display:block!important;width:42px!important;height:42px!important;max-width:42px!important;max-height:42px!important;object-fit:contain!important;border-radius:50%!important}
+.iris54-brand-text{font-size:12px!important;line-height:1.15!important;color:#dbeafe!important;white-space:nowrap!important;max-width:90px!important;overflow:hidden!important}
+@media(max-width:640px){.iris54-floating-brand{top:10px!important;left:10px!important;padding:5px 8px!important}.iris54-floating-brand .iris54-brand-eye-real,.iris54-brand-eye-real,.iris54-floating-brand img{width:34px!important;height:34px!important;max-width:34px!important;max-height:34px!important}.iris54-brand-text{display:none!important}}
