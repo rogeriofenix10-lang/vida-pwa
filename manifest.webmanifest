@@ -1,18 +1,21 @@
 {
-  "name": "VIDA — Sua vida organizada pela IA",
-  "short_name": "VIDA",
-  "description": "Seu assistente pessoal inteligente.",
-  "lang": "pt-BR",
-  "dir": "ltr",
-  "start_url": "./",
-  "scope": "./",
+  "name": "Iris — Sua vida, organizada pela IA",
+  "short_name": "Iris",
+  "description": "Sua vida, organizada pela Iris IA.",
+  "start_url": ".",
   "display": "standalone",
-  "orientation": "portrait",
-  "background_color": "#101828",
-  "theme_color": "#101828",
-  "categories": ["productivity", "lifestyle", "utilities"],
+  "background_color": "#090d15",
+  "theme_color": "#090d15",
   "icons": [
-    {"src":"icons/icon-192.png","sizes":"192x192","type":"image/png","purpose":"any maskable"},
-    {"src":"icons/icon-512.png","sizes":"512x512","type":"image/png","purpose":"any maskable"}
+    {
+      "src": "./image.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "./image.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
   ]
 }
