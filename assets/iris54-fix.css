@@ -1,40 +1,234 @@
+/* Iris — composição de referência mobile e desktop
+   Mantém os componentes e funções existentes; corrige somente escala, posição e proporção. */
 
-/* Reference layout: compact desktop hero with one realistic central eye */
-.iris54-hero{min-height:760px!important;padding:88px 24px 120px!important}
-.iris54-central-eye{width:250px!important;height:250px!important;margin:0 auto 24px!important}
-.iris54-ocular-eye-wrapper{width:230px!important;height:230px!important;border-radius:50%!important}
-.iris54-ocular-eye-img{object-fit:cover!important;object-position:center!important}
-.iris54-tagline{font-size:clamp(1.65rem,2.7vw,2.15rem)!important;line-height:1.15!important;letter-spacing:-.025em!important;margin-bottom:28px!important}
-.iris54-command-bar{width:min(1000px,82vw)!important;min-height:74px!important;border-radius:38px!important;padding:10px 16px!important}
-.iris54-cmd-input{font-size:1.1rem!important;padding:0 8px!important}
-.iris54-quick-nav{width:min(1120px,86vw)!important;margin-top:30px!important;gap:14px!important}
-.iris54-quick-btn{min-width:140px!important;padding:15px 22px!important;border-radius:28px!important;background:rgba(9,25,49,.45)!important}
-@media(max-width:640px){.iris54-hero{min-height:680px!important;padding:70px 14px 90px!important}.iris54-central-eye{width:190px!important;height:190px!important}.iris54-ocular-eye-wrapper{width:175px!important;height:175px!important}.iris54-tagline{font-size:1.65rem!important}.iris54-command-bar{width:94vw!important;min-height:62px!important}.iris54-quick-nav{width:94vw!important;gap:8px!important}.iris54-quick-btn{min-width:0!important;flex:1 1 42%!important;padding:11px 8px!important}}
-/* Stable base rules: separate the small brand eye from the central eye */
-html,body,#root,.iris54-root{width:100%!important;min-width:0!important;margin:0!important;padding:0!important;overflow-x:hidden!important}
-.iris54-main-container{width:100%!important;min-height:100vh!important;margin:0!important;padding:0!important;display:flex!important;align-items:center!important;box-sizing:border-box!important;overflow-x:hidden!important}
-.iris54-hero{width:100%!important;max-width:1280px!important;box-sizing:border-box!important;margin:0 auto!important;display:flex!important;flex-direction:column!important;align-items:center!important;justify-content:center!important;text-align:center!important}
-.iris54-ocular-eye-wrapper{position:relative!important;display:block!important;width:230px!important;height:230px!important;overflow:hidden!important;border-radius:50%!important;cursor:pointer!important;flex:none!important;box-shadow:0 0 25px rgba(40,110,255,.7),0 0 70px rgba(0,136,255,.25)!important}
-.iris54-ocular-eye-frame{position:relative!important;width:100%!important;height:100%!important;overflow:hidden!important;border-radius:50%!important}
-.iris54-ocular-eye-img{display:block!important;width:100%!important;height:100%!important;max-width:none!important;object-fit:cover!important;object-position:center!important;border-radius:50%!important}
-.iris54-ocular-eye-overlay{position:absolute!important;inset:0!important;border-radius:50%!important;pointer-events:none!important;background:radial-gradient(circle at 50% 48%,transparent 35%,rgba(5,18,45,.18) 70%,rgba(0,8,24,.55))!important}
-.iris54-floating-brand{position:fixed!important;top:22px!important;left:30px!important;z-index:80!important;display:flex!important;align-items:center!important;gap:8px!important;width:auto!important;height:auto!important;padding:0!important;border:0!important;background:transparent!important;box-shadow:none!important}
-.iris54-floating-brand .iris54-ocular-eye-wrapper,.iris54-floating-brand .iris54-brand-eye-real{width:34px!important;height:34px!important;max-width:34px!important;max-height:34px!important;box-shadow:0 0 12px rgba(0,136,255,.6)!important}
-.iris54-floating-brand .iris54-ocular-eye-frame,.iris54-floating-brand .iris54-ocular-eye-img,.iris54-floating-brand .iris54-ocular-eye-overlay{width:34px!important;height:34px!important}
-.iris54-floating-brand .iris54-brand-text{font-size:1rem!important;color:#dbeafe!important;white-space:nowrap!important}
-.iris54-command-bar{box-sizing:border-box!important;max-width:82vw!important}
-.iris54-quick-nav{box-sizing:border-box!important;max-width:90vw!important}
-@media(max-width:640px){
- .iris54-main-container{min-height:100svh!important}
- .iris54-hero{width:100%!important;min-height:100svh!important;padding:70px 10px 80px!important;overflow:hidden!important}
- .iris54-central-eye{width:180px!important;height:180px!important;margin:0 auto 22px!important}
- .iris54-central-eye .iris54-ocular-eye-wrapper{width:165px!important;height:165px!important}
- .iris54-tagline{font-size:1.25rem!important;white-space:nowrap!important}
- .iris54-command-bar{width:94vw!important;max-width:94vw!important;height:60px!important;min-height:60px!important;padding:8px 10px!important}
- .iris54-cmd-input{font-size:.78rem!important;min-width:0!important}
- .iris54-quick-nav{width:94vw!important;max-width:94vw!important;display:grid!important;grid-template-columns:repeat(3,minmax(0,1fr))!important;gap:6px!important;margin-top:22px!important}
- .iris54-quick-btn{width:100%!important;min-width:0!important;height:38px!important;min-height:38px!important;padding:3px!important;font-size:.6rem!important;border-radius:18px!important}
- .iris54-floating-brand{top:12px!important;left:12px!important}
- .iris54-floating-brand .iris54-ocular-eye-wrapper,.iris54-floating-brand .iris54-brand-eye-real,.iris54-floating-brand .iris54-ocular-eye-frame,.iris54-floating-brand .iris54-ocular-eye-img,.iris54-floating-brand .iris54-ocular-eye-overlay{width:26px!important;height:26px!important;max-width:26px!important;max-height:26px!important}
- .iris54-floating-brand .iris54-brand-text{font-size:.8rem!important}
+html, body, #root, .iris54-root {
+  width: 100%;
+  min-width: 0;
+  min-height: 100%;
+  margin: 0;
+  padding: 0;
+  overflow-x: hidden;
+}
+
+.iris54-main-container {
+  width: 100%;
+  min-height: 100svh;
+  margin: 0;
+  padding: 0 20px;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow-x: hidden;
+}
+
+.iris54-hero {
+  width: min(100%, 760px);
+  min-height: 100svh;
+  margin: 0 auto;
+  padding: 88px 0 64px;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
+/* Marca discreta no canto, separada do olho central. */
+.iris54-floating-brand {
+  position: fixed;
+  top: 14px;
+  left: 16px;
+  z-index: 80;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: auto;
+  height: auto;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.iris54-floating-brand .iris54-ocular-eye-wrapper,
+.iris54-floating-brand .iris54-brand-eye-real,
+.iris54-floating-brand .iris54-ocular-eye-frame,
+.iris54-floating-brand .iris54-ocular-eye-img,
+.iris54-floating-brand .iris54-ocular-eye-overlay {
+  width: 24px;
+  height: 24px;
+  max-width: 24px;
+  max-height: 24px;
+}
+
+.iris54-floating-brand .iris54-brand-text {
+  color: #dbeafe;
+  font-size: 0.72rem;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+/* Olho central único, sem deslocamento ou círculo duplicado. */
+.iris54-central-eye {
+  width: 164px;
+  height: 164px;
+  margin: 0 auto 18px;
+  flex: 0 0 auto;
+}
+
+.iris54-central-eye .iris54-ocular-eye-wrapper,
+.iris54-central-eye .iris54-ocular-eye-frame,
+.iris54-central-eye .iris54-ocular-eye-img,
+.iris54-central-eye .iris54-ocular-eye-overlay {
+  width: 100%;
+  height: 100%;
+}
+
+.iris54-ocular-eye-wrapper {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  border-radius: 50%;
+  flex: none;
+  box-shadow: 0 0 22px rgba(40, 110, 255, .68), 0 0 58px rgba(0, 136, 255, .22);
+}
+
+.iris54-ocular-eye-frame {
+  position: relative;
+  overflow: hidden;
+  border-radius: 50%;
+}
+
+.iris54-ocular-eye-img {
+  display: block;
+  max-width: none;
+  object-fit: cover;
+  object-position: center;
+  border-radius: 50%;
+}
+
+.iris54-ocular-eye-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border-radius: 50%;
+  background: radial-gradient(circle at 50% 48%, transparent 35%, rgba(5, 18, 45, .14) 70%, rgba(0, 8, 24, .48));
+}
+
+.iris54-tagline {
+  max-width: 100%;
+  margin: 0 0 18px;
+  color: #e7f0ff;
+  font-size: clamp(1rem, 2.2vw, 1.35rem);
+  line-height: 1.2;
+  letter-spacing: -.02em;
+  white-space: nowrap;
+}
+
+.iris54-command-bar {
+  width: min(100%, 430px);
+  min-height: 46px;
+  height: 46px;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  border-radius: 24px;
+}
+
+.iris54-cmd-input {
+  min-width: 0;
+  flex: 1;
+  padding: 0 4px;
+  font-size: .78rem;
+}
+
+.iris54-cmd-mic,
+.iris54-cmd-send {
+  width: 32px;
+  height: 32px;
+  min-width: 32px;
+  padding: 0;
+  border-radius: 50%;
+}
+
+/* Grade da tela de referência: seis atalhos e Menu abaixo, centralizados. */
+.iris54-quick-nav {
+  width: min(100%, 430px);
+  max-width: 430px;
+  margin-top: 14px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  box-sizing: border-box;
+}
+
+.iris54-quick-btn {
+  width: 100%;
+  min-width: 0;
+  height: 30px;
+  min-height: 30px;
+  padding: 3px 8px;
+  border-radius: 16px;
+  font-size: .62rem;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.iris54-quick-btn .icon {
+  display: inline-flex;
+  align-items: center;
+  margin-right: 3px;
+}
+
+/* Saúde não faz parte da composição de referência; Menu ocupa a linha inteira. */
+.iris54-quick-nav > .iris54-quick-btn:nth-child(7) {
+  display: none;
+}
+
+.iris54-quick-nav > .iris54-quick-btn:nth-child(8) {
+  grid-column: 1 / -1;
+}
+
+.iris54-module-menu {
+  width: min(100%, 430px);
+  box-sizing: border-box;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.iris54-module-menu a {
+  min-height: 28px;
+  padding: 7px 6px;
+  border-radius: 8px;
+  font-size: .62rem;
+  line-height: 1.1;
+  text-align: center;
+}
+
+@media (min-width: 641px) {
+  .iris54-hero { padding-top: 100px; padding-bottom: 80px; }
+  .iris54-central-eye { width: 220px; height: 220px; margin-bottom: 22px; }
+  .iris54-tagline { font-size: 1.5rem; }
+  .iris54-command-bar, .iris54-quick-nav, .iris54-module-menu { max-width: 560px; }
+  .iris54-quick-btn { height: 36px; min-height: 36px; font-size: .75rem; }
+}
+
+@media (max-width: 640px) {
+  .iris54-main-container { min-height: 100svh; padding: 0 12px; }
+  .iris54-hero { min-height: 100svh; padding: 54px 0 42px; }
+  .iris54-central-eye { width: 144px; height: 144px; margin-bottom: 16px; }
+  .iris54-tagline { margin-bottom: 16px; font-size: .92rem; }
+  .iris54-command-bar, .iris54-quick-nav, .iris54-module-menu { width: min(100%, 330px); }
+  .iris54-command-bar { height: 42px; min-height: 42px; }
+  .iris54-cmd-input { font-size: .69rem; }
+  .iris54-cmd-mic, .iris54-cmd-send { width: 28px; height: 28px; min-width: 28px; }
+  .iris54-quick-btn { height: 28px; min-height: 28px; font-size: .58rem; }
 }
