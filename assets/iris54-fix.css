@@ -101,3 +101,12 @@ main.iris54-main-container,.iris54-main-container{position:relative!important;le
  .iris54-quick-nav{width:96vw!important;max-width:96vw!important;gap:3px!important;margin-left:auto!important;margin-right:auto!important}
  .iris54-quick-btn{height:27px!important;min-height:27px!important;padding:1px 3px!important;border-radius:14px!important;font-size:.48rem!important;line-height:1!important}
 }
+/* Exact reference desktop composition */
+.iris54-hero{min-height:820px!important;padding:120px 24px 150px!important}
+.iris54-central-eye,.iris54-central-eye .iris54-ocular-eye-wrapper,.iris54-central-eye .iris54-ocular-eye-frame,.iris54-central-eye .iris54-ocular-eye-img{width:220px!important;height:220px!important}
+.iris54-tagline{font-size:1.65rem!important;margin-bottom:26px!important}
+.iris54-command-bar{width:1000px!important;max-width:82vw!important;height:76px!important;min-height:76px!important;border-radius:40px!important}
+.iris54-quick-nav{display:grid!important;grid-template-columns:repeat(7,minmax(0,1fr))!important;width:1240px!important;max-width:90vw!important;gap:14px!important;margin-top:32px!important}
+.iris54-quick-nav>.iris54-quick-btn:nth-child(7){display:none!important}
+.iris54-quick-btn{height:58px!important;min-height:58px!important;padding:8px 12px!important;font-size:.95rem!important;border-radius:30px!important}
+@media(max-width:900px){.iris54-hero{min-height:760px!important;padding:90px 16px 100px!important}.iris54-quick-nav{grid-template-columns:repeat(3,minmax(0,1fr))!important;width:94vw!important;gap:6px!important}.iris54-quick-btn{height:34px!important;min-height:34px!important;font-size:.58rem!important;padding:3px 5px!important}}
