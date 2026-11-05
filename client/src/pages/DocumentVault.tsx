@@ -16,7 +16,7 @@ import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { readLocal, writeLocal } from "@/lib/irisLocalStore";
 import { runLocalOcr } from "@/lib/localOcr";
-import { loadIrisData, saveIrisData } from "@/lib/irisWorker";
+import { loadIrisData, saveIrisData, uploadIrisFile } from "@/lib/irisWorker";
 import "./document-vault.css";
 
 type Kind = "saude" | "financeiro" | "geral";
@@ -49,6 +49,7 @@ type DocumentRecord = {
   money: Money[];
   markers: Record<string, number>;
   hash?: string;
+  storageKey?: string;
   reviewStatus?: "pending" | "confirmed";
   confidence?: number;
   blob?: Blob;
@@ -183,6 +184,7 @@ export default function DocumentVault() {
           id: item.id,
           name: item.name,
           mime_type: item.mime,
+          storage_key: item.storageKey ?? null,
           payload,
         }).catch(() => undefined);
         if (item.kind === "financeiro") {
@@ -203,6 +205,8 @@ export default function DocumentVault() {
     setMessage("Processando arquivos localmente…");
     const added: DocumentRecord[] = [];
     let duplicates = 0;
+    let uploaded = 0;
+    let uploadFailures = 0;
     for (const file of Array.from(files)) {
       const hash = `${file.name.toLowerCase()}|${file.size}|${file.lastModified}`;
       if (items.some((item) => item.hash === hash)) {
@@ -245,11 +249,18 @@ export default function DocumentVault() {
         confidence: text ? 0.78 : 0.35,
         blob: file,
       };
+      try {
+        const remote = await uploadIrisFile(file, record.id);
+        record.storageKey = remote.key;
+        uploaded++;
+      } catch {
+        uploadFailures++;
+      }
       added.push(record);
     }
     await save([...added, ...items]);
     setMessage(
-      `${added.length} arquivo(s) arquivado(s) para revisão${duplicates ? `; ${duplicates} duplicado(s) ignorado(s)` : ""}. Nenhuma integração externa foi acionada.`,
+      `${added.length} arquivo(s) arquivado(s) para revisão${duplicates ? `; ${duplicates} duplicado(s) ignorado(s)` : ""}. R2: ${uploaded} enviado(s)${uploadFailures ? `, ${uploadFailures} pendente(s) localmente` : ""}.`,
     );
   };
   const availableMonths = useMemo(
