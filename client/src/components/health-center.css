@@ -1,0 +1,510 @@
+/* ==========================================================================
+   CENTRAL DE SAÚDE DA IRIS — ESTILIZAÇÃO COMPLETA & RESPONSIVA
+   ========================================================================== */
+
+.iris-health-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  width: 100%;
+}
+
+/* NAVEGAÇÃO POR ABAS */
+.iris-health-tabs {
+  display: flex;
+  gap: 8px;
+  border-bottom: 1px solid var(--iris-border);
+  padding-bottom: 12px;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.iris-health-tab-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 16px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--iris-border);
+  color: var(--iris-muted);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.2s ease;
+}
+
+.iris-health-tab-btn:hover {
+  background: rgba(255, 255, 255, 0.07);
+  color: #fff;
+  border-color: rgba(56, 189, 248, 0.4);
+}
+
+.iris-health-tab-btn.active {
+  background: rgba(59, 130, 246, 0.22);
+  border-color: var(--iris-cyan);
+  color: #a5f3fc;
+  box-shadow: 0 0 14px rgba(34, 211, 238, 0.25);
+}
+
+/* CARDS DE RESUMO E PILARES */
+.iris-health-grid-2 {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+}
+
+.iris-health-grid-3 {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+}
+
+.iris-health-grid-4 {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 14px;
+}
+
+.iris-health-card {
+  padding: 20px;
+  border-radius: 18px;
+  background: rgba(11, 22, 42, 0.75);
+  border: 1px solid var(--iris-border);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  backdrop-filter: blur(10px);
+}
+
+.iris-health-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.iris-health-card-header h3 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.iris-health-card-header span.badge {
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: rgba(34, 211, 238, 0.12);
+  color: var(--iris-cyan);
+  border: 1px solid rgba(34, 211, 238, 0.25);
+}
+
+.iris-health-stat-value {
+  font-size: 32px;
+  font-weight: 800;
+  color: #fff;
+  line-height: 1.1;
+}
+
+.iris-health-stat-sub {
+  font-size: 12px;
+  color: var(--iris-muted);
+}
+
+/* ÁREA DE GOVERNANÇA E PRIVACIDADE */
+.iris-health-security-box {
+  padding: 20px;
+  border-radius: 18px;
+  background: linear-gradient(135deg, rgba(14, 28, 54, 0.85), rgba(7, 14, 28, 0.95));
+  border: 1px solid rgba(56, 189, 248, 0.3);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.iris-health-security-box h4 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--iris-cyan);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.iris-health-security-list {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+  font-size: 13px;
+  color: #cbd5e1;
+}
+
+.iris-health-security-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  line-height: 1.4;
+}
+
+.iris-health-security-item.positive span.icon {
+  color: var(--iris-green);
+}
+
+.iris-health-security-item.restricted span.icon {
+  color: #f87171;
+}
+
+/* DROPZONE DE UPLOAD */
+.iris-health-dropzone {
+  border: 2px dashed rgba(56, 189, 248, 0.35);
+  border-radius: 20px;
+  padding: 36px 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 12px;
+  background: rgba(14, 26, 48, 0.4);
+  cursor: pointer;
+  transition: all 0.25s ease;
+}
+
+.iris-health-dropzone:hover {
+  border-color: var(--iris-cyan);
+  background: rgba(34, 211, 238, 0.06);
+  transform: translateY(-1px);
+}
+
+.iris-health-dropzone.dragging {
+  border-color: #38bdf8;
+  background: rgba(56, 189, 248, 0.12);
+}
+
+.iris-health-dropzone-icon {
+  width: 54px;
+  height: 54px;
+  border-radius: 50%;
+  background: rgba(56, 189, 248, 0.12);
+  color: var(--iris-cyan);
+  display: grid;
+  place-items: center;
+}
+
+.iris-health-dropzone strong {
+  font-size: 16px;
+  color: #fff;
+}
+
+.iris-health-dropzone p {
+  margin: 0;
+  font-size: 13px;
+  color: var(--iris-muted);
+  max-width: 480px;
+}
+
+.iris-health-formats-badge {
+  display: inline-flex;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.iris-health-format-chip {
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--iris-border);
+  font-size: 11px;
+  font-weight: 700;
+  color: #93c5fd;
+  text-transform: uppercase;
+}
+
+/* TABELA DE HISTÓRICO DE MARCADORES */
+.iris-health-table-container {
+  width: 100%;
+  overflow-x: auto;
+  border-radius: 16px;
+  border: 1px solid var(--iris-border);
+  background: rgba(10, 19, 36, 0.6);
+}
+
+.iris-health-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+  font-size: 13px;
+}
+
+.iris-health-table th {
+  padding: 12px 16px;
+  background: rgba(14, 26, 48, 0.9);
+  color: var(--iris-muted);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  border-bottom: 1px solid var(--iris-border);
+}
+
+.iris-health-table td {
+  padding: 14px 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  color: #f1f5f9;
+}
+
+.iris-health-table tr:last-child td {
+  border-bottom: none;
+}
+
+.iris-health-table tr:hover td {
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.iris-health-marker-name {
+  font-weight: 600;
+  color: #fff;
+}
+
+.iris-health-marker-tag {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: rgba(59, 130, 246, 0.15);
+  color: #93c5fd;
+  margin-top: 3px;
+}
+
+/* EMPTY STATE */
+.iris-health-empty {
+  padding: 40px 20px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  color: var(--iris-muted);
+}
+
+.iris-health-empty-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--iris-muted-dim);
+  display: grid;
+  place-items: center;
+}
+
+.iris-health-empty h4 {
+  margin: 0;
+  font-size: 15px;
+  color: #cbd5e1;
+}
+
+.iris-health-empty p {
+  margin: 0;
+  font-size: 13px;
+  max-width: 420px;
+  line-height: 1.5;
+}
+
+/* RESPONSIVIDADE */
+@media (max-width: 840px) {
+  .iris-health-grid-4,
+  .iris-health-grid-3 {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .iris-health-security-list {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 600px) {
+  .iris-health-grid-4,
+  .iris-health-grid-3,
+  .iris-health-grid-2 {
+    grid-template-columns: 1fr;
+  }
+
+  .iris-health-dropzone {
+    padding: 24px 14px;
+  }
+}
+
+/* CARDS DE COMPARAÇÃO TEMPORAL & EVOLUÇÃO */
+.iris-health-compare-card {
+  padding: 18px 20px;
+  border-radius: 16px;
+  background: rgba(11, 22, 42, 0.7);
+  border: 1px solid var(--iris-border);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  transition: all 0.2s ease;
+}
+
+.iris-health-compare-card:hover {
+  border-color: rgba(56, 189, 248, 0.4);
+  background: rgba(14, 28, 54, 0.85);
+}
+
+.iris-health-compare-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.iris-health-timeline-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.iris-health-timeline-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.iris-health-timeline-year {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--iris-muted);
+  text-transform: uppercase;
+}
+
+.iris-health-timeline-val {
+  font-size: 16px;
+  font-weight: 800;
+  color: #fff;
+}
+
+.iris-health-timeline-arrow {
+  color: var(--iris-cyan);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.iris-health-pill-altered {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  background: rgba(244, 63, 94, 0.15);
+  color: #fb7185;
+  border: 1px solid rgba(244, 63, 94, 0.3);
+}
+
+.iris-health-pill-normal {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  background: rgba(16, 185, 129, 0.15);
+  color: #34d399;
+  border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+.iris-health-pill-trend {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+/* ÁREA DE PERGUNTAR À IRIS */
+.iris-health-ask-container {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.iris-health-prompt-pills {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.iris-health-prompt-pill {
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: rgba(56, 189, 248, 0.08);
+  border: 1px solid rgba(56, 189, 248, 0.25);
+  color: #93c5fd;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.iris-health-prompt-pill:hover {
+  background: rgba(56, 189, 248, 0.18);
+  color: #fff;
+  border-color: var(--iris-cyan);
+}
+
+.iris-health-reply-box {
+  padding: 20px;
+  border-radius: 16px;
+  background: rgba(10, 19, 36, 0.85);
+  border: 1px solid rgba(56, 189, 248, 0.3);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.iris-health-disclaimer {
+  padding: 12px 16px;
+  border-radius: 10px;
+  background: rgba(245, 158, 11, 0.1);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  color: #fde68a;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+/* FORMULÁRIOS RÁPIDOS */
+.iris-health-form-box {
+  padding: 18px 20px;
+  border-radius: 16px;
+  background: rgba(14, 26, 48, 0.65);
+  border: 1px solid var(--iris-border);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.iris-health-form-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+}

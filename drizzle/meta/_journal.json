@@ -1,0 +1,139 @@
+{
+  "version": "7",
+  "dialect": "mysql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "5",
+      "when": 1788110017802,
+      "tag": "0000_aromatic_kid_colt",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "5",
+      "when": 1788112857872,
+      "tag": "0001_yellow_vargas",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1788113025875,
+      "tag": "0002_left_violations",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "5",
+      "when": 1788113071883,
+      "tag": "0003_illegal_black_cat",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "5",
+      "when": 1788117792935,
+      "tag": "0004_youthful_wild_pack",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "5",
+      "when": 1788117934390,
+      "tag": "0005_hot_giant_girl",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "5",
+      "when": 1788119796864,
+      "tag": "0006_marvelous_warstar",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "5",
+      "when": 1788393600000,
+      "tag": "0007_iris_production",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1788641494084,
+      "tag": "0008_security_hardening",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1788642661829,
+      "tag": "0009_agent_core",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1760000000000,
+      "tag": "0010_agent_intelligence",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1788643000000,
+      "tag": "0011_agent_executor",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1788644000000,
+      "tag": "0012_agent_tools",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1788663815455,
+      "tag": "0013_external_integrations",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1788663815455,
+      "tag": "0014_iris_2_0",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1788700000000,
+      "tag": "0015_iris_3_1_reconciliation",
+      "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1788701000000,
+      "tag": "0016_iris_5_0_runtime",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1788674244579,
+      "tag": "0017_iris_5_0_1_operational",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1789000000000,
+      "tag": "0018_integration_action_approvals",
+      "breakpoints": true
+    }
+  ]
+}

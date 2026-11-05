@@ -1,0 +1,4550 @@
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&display=swap');
+@import "tailwindcss";
+@import "tw-animate-css";
+
+:root {
+  --background: #f7f9fc;
+  --foreground: #14243d;
+  --card: #ffffff;
+  --card-foreground: #14243d;
+  --primary: #1d4ed8;
+  --primary-foreground: #ffffff;
+  --muted: #eef3f8;
+  --muted-foreground: #6d7c92;
+  --border: #e1e8f0;
+  --ring: #8bb5ef;
+  --radius: 1rem;
+  font-family: 'DM Sans', sans-serif;
+}
+
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body { margin: 0; min-width: 320px; background: var(--background); color: var(--foreground); }
+button, input { font: inherit; }
+button { cursor: pointer; }
+button, a, input { -webkit-tap-highlight-color: transparent; }
+:focus-visible { outline: 3px solid rgba(29, 78, 216, .42); outline-offset: 3px; }
+body { line-height: 1.4; }
+@media (max-width: 640px) {
+  button { min-height: 42px; }
+  .icon-button, .mic-button, .send-button, .close-onboarding { min-height: 42px; min-width: 42px; }
+}
+
+.vida-shell { min-height: 100vh; background: radial-gradient(circle at 90% 0%, rgba(203, 234, 255, .55), transparent 30rem), #f7f9fc; }
+.topbar { height: 72px; display: flex; align-items: center; justify-content: space-between; padding: 0 42px; border-bottom: 1px solid rgba(215, 225, 236, .72); background: rgba(255,255,255,.82); backdrop-filter: blur(18px); position: sticky; top: 0; z-index: 20; }
+.brand-lockup { display: flex; align-items: center; gap: 10px; color: #15325e; font-family: Manrope, sans-serif; font-weight: 800; letter-spacing: .22em; font-size: 16px; }
+.brand-mark { width: 34px; height: 34px; display: grid; place-items: center; border-radius: 11px; color: white; background: linear-gradient(135deg, #1449a5, #1fc6c8); box-shadow: 0 8px 18px rgba(33, 108, 174, .22); }
+.topbar-actions { display: flex; align-items: center; gap: 14px; }
+.demo-pill, .status-tag { display: inline-flex; align-items: center; gap: 7px; color: #1d6b69; background: #e8f8f4; border: 1px solid #ccefe6; border-radius: 999px; padding: 7px 11px; font-size: 12px; font-weight: 700; }
+.live-dot { width: 7px; height: 7px; border-radius: 50%; background: #16b889; box-shadow: 0 0 0 4px rgba(22,184,137,.12); }
+.icon-button { width: 36px; height: 36px; border: 0; border-radius: 12px; color: #6d7c92; display: grid; place-items: center; background: transparent; }
+.icon-button:hover { background: #eef3f8; color: #183a68; }
+.avatar { width: 34px; height: 34px; display: grid; place-items: center; border-radius: 50%; color: #1d4ed8; background: #dbeafe; font-weight: 800; }
+.app-grid { display: grid; grid-template-columns: 236px minmax(0, 1fr); max-width: 1500px; margin: 0 auto; }
+.side-nav { min-height: calc(100vh - 72px); padding: 34px 18px 28px; border-right: 1px solid rgba(218, 227, 237, .78); display: flex; flex-direction: column; gap: 5px; }
+.side-caption, .eyebrow { color: #8b9aad; font-size: 10px; font-weight: 800; letter-spacing: .15em; }
+.side-caption { padding: 0 13px 10px; margin-top: 4px; }
+.nav-item { display: flex; align-items: center; gap: 12px; width: 100%; padding: 11px 13px; border: 0; border-radius: 12px; color: #667892; background: transparent; text-align: left; font-size: 13px; font-weight: 600; }
+.nav-item:hover, .nav-item.active { color: #184994; background: #eaf2ff; }
+.nav-item.active { box-shadow: inset 3px 0 #2a6be4; }
+.soon { margin-left: auto; color: #9cacbd; font-size: 9px; font-weight: 700; }
+.side-divider { height: 1px; margin: 22px 12px 20px; background: #e5ebf2; }
+.side-footer { margin-top: auto; display: flex; align-items: flex-start; gap: 8px; padding: 15px 13px; border: 1px solid #d6eee8; border-radius: 14px; color: #347e75; background: #f1fbf8; font-size: 11px; line-height: 1.45; }
+.main-content { min-width: 0; padding: 54px clamp(24px, 4vw, 64px) 80px; max-width: 1240px; }
+.hero-row { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; margin-bottom: 34px; }
+h1, h2, h3, p { margin: 0; }
+h1, h2, h3 { font-family: Manrope, sans-serif; color: #152b4c; }
+h1 { margin-top: 9px; font-size: clamp(30px, 4vw, 42px); letter-spacing: -.05em; line-height: 1.05; }
+h1 span { color: #18b9b2; }
+.hero-subtitle { margin-top: 10px; color: #71829a; font-size: 15px; }
+.hero-stat { display: flex; align-items: center; gap: 12px; padding: 13px 17px; border: 1px solid #dfe9f3; border-radius: 16px; color: #6c7c91; background: rgba(255,255,255,.74); font-size: 11px; line-height: 1.35; }
+.hero-stat span { color: #1d4ed8; font: 800 30px Manrope, sans-serif; }
+.command-card { padding: 24px; border: 1px solid #dbe7f2; border-radius: 22px; background: linear-gradient(135deg, #ffffff, #f4f9ff); box-shadow: 0 16px 42px rgba(40, 82, 128, .08); }
+.command-top { display: flex; align-items: center; gap: 12px; }
+.command-icon { width: 40px; height: 40px; display: grid; place-items: center; color: white; border-radius: 13px; background: linear-gradient(145deg, #1449a5, #2cc5c1); }
+.command-top strong { display: block; font: 700 16px Manrope, sans-serif; color: #18345d; }
+.command-top p { margin-top: 2px; color: #8594a8; font-size: 12px; }
+.ai-picker { display: flex; flex-direction: column; gap: 3px; margin-left: auto; color: #70839a; font-size: 10px; font-weight: 700; }
+.ai-picker select { min-height: 34px; padding: 0 28px 0 10px; border: 1px solid #cfe0ef; border-radius: 9px; color: #1d4f98; background: #f7fbff; font-size: 11px; font-weight: 700; outline: none; }
+.ai-picker select:focus-visible { outline: 3px solid rgba(29, 78, 216, .25); outline-offset: 2px; }
+.ai-badge { padding: 6px 9px; border-radius: 8px; color: #1556ae; background: #e6f0ff; font-size: 10px; font-weight: 800; letter-spacing: .08em; }
+.command-input-wrap { display: flex; align-items: center; gap: 10px; margin-top: 20px; padding: 8px 8px 8px 15px; border: 1px solid #d9e4ef; border-radius: 15px; color: #91a0b1; background: white; }
+.command-input-wrap input { height: 40px; flex: 1; min-width: 0; border: 0; outline: none; box-shadow: none; color: #19375e; }
+.command-input-wrap input:focus { box-shadow: none; }
+.mic-button, .send-button { flex: 0 0 auto; width: 38px; height: 38px; display: grid; place-items: center; border: 0; border-radius: 11px; color: #1d4ed8; background: #edf4ff; }
+.mic-button.listening { color: #fff; background: #e05c68; animation: pulse 1s infinite; }
+.send-button { color: #fff; background: #1d4ed8; }
+.prompt-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.prompt-row button { padding: 7px 10px; border: 1px solid #dfe8f2; border-radius: 999px; color: #6f8198; background: #f9fbfd; font-size: 11px; }
+.prompt-row button:hover { color: #164994; border-color: #bbd3f0; background: #eef5ff; }
+.radar-section { margin-top: 48px; }
+.section-heading, .panel-heading, .dialog-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; }
+.section-heading h2, .panel-heading h2, .dialog-heading h2 { margin-top: 7px; font-size: 22px; letter-spacing: -.04em; }
+.section-heading p { margin-top: 6px; color: #8190a3; font-size: 13px; }
+.outline-action { display: inline-flex; align-items: center; gap: 7px; padding: 9px 12px; border: 1px solid #d7e3ef; border-radius: 10px; color: #275999; background: #fff; font-size: 12px; font-weight: 700; }
+.radar-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 15px; margin-top: 22px; }
+.radar-card { position: relative; padding: 18px 19px 14px; overflow: hidden; border: 1px solid #e0e8f1; border-radius: 17px; background: #fff; box-shadow: 0 7px 20px rgba(45, 76, 110, .045); }
+.radar-card::before { content: ''; position: absolute; inset: 0 auto 0 0; width: 4px; background: #2ab79f; }
+.radar-card.priority-urgent::before { background: #e36572; } .radar-card.priority-important::before { background: #e4a53d; } .radar-card.priority-info::before { background: #25b2cb; }
+.radar-card-top { display: flex; justify-content: space-between; align-items: center; }
+.priority-label, .date-label { display: inline-flex; align-items: center; gap: 6px; font-size: 10px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+.priority-icon { width: 20px; height: 20px; display: grid; place-items: center; border-radius: 7px; color: #29856f; background: #e8f8f2; font-size: 12px; }
+.priority-urgent .priority-label { color: #cf5262; } .priority-urgent .priority-icon { color: #cf5262; background: #ffebed; } .priority-important .priority-label { color: #be7a17; } .priority-important .priority-icon { color: #be7a17; background: #fff5dd; } .priority-info .priority-label { color: #1693af; } .priority-info .priority-icon { color: #1693af; background: #e6f8fc; }
+.date-label { color: #8493a6; letter-spacing: 0; text-transform: none; font-weight: 600; }
+.radar-card h3 { margin-top: 18px; font-size: 16px; letter-spacing: -.025em; }
+.radar-card p { margin-top: 5px; color: #79899e; font-size: 12px; }
+.card-divider { height: 1px; margin: 15px 0 10px; background: #edf1f5; }
+.card-actions { display: flex; gap: 12px; }
+.card-actions button { display: inline-flex; align-items: center; gap: 5px; padding: 0; border: 0; color: #7890aa; background: transparent; font-size: 11px; font-weight: 700; }
+.card-actions button:hover { color: #1d4ed8; }
+.empty-state { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 42px; margin-top: 20px; border: 1px dashed #cddae8; border-radius: 18px; color: #7390ae; background: rgba(255,255,255,.6); }
+.empty-state strong { color: #244265; font-size: 14px; }
+.lower-grid { display: grid; grid-template-columns: 1.35fr .65fr; gap: 16px; margin-top: 26px; }
+.conversation-panel, .next-panel { padding: 20px; border: 1px solid #e0e8f1; border-radius: 18px; background: #fff; }
+.panel-heading h2 { font-size: 18px; }
+.muted-icon { color: #9eb1c6; }
+.chat-feed { display: flex; flex-direction: column; gap: 10px; max-height: 230px; overflow: auto; margin-top: 18px; padding-right: 4px; }
+.chat-message { display: flex; gap: 8px; align-items: flex-end; max-width: 92%; }
+.chat-message.user { align-self: flex-end; flex-direction: row-reverse; }
+.chat-avatar { width: 26px; height: 26px; display: grid; place-items: center; flex: 0 0 auto; border-radius: 9px; color: #1954a1; background: #e7f0ff; font-size: 10px; font-weight: 800; }
+.chat-message.user .chat-avatar { color: #247b6b; background: #e5f7f1; }
+.chat-bubble { padding: 10px 12px; border-radius: 13px 13px 13px 4px; color: #4f6885; background: #f2f6fa; font-size: 12px; line-height: 1.45; }
+.chat-message.user .chat-bubble { border-radius: 13px 13px 4px 13px; color: #fff; background: #1d4ed8; }
+.typing { display: flex; gap: 4px; }
+.typing span { width: 5px; height: 5px; border-radius: 50%; background: #87a0bb; animation: bounce 1s infinite; }.typing span:nth-child(2) { animation-delay: .15s; }.typing span:nth-child(3) { animation-delay: .3s; }
+.next-panel { background: linear-gradient(145deg, #eff8ff, #f4fcfa); }
+.next-panel p { margin-top: 22px; color: #627a95; font-size: 13px; line-height: 1.6; }
+.next-cta { display: inline-flex; align-items: center; gap: 7px; margin-top: 27px; padding: 10px 13px; border: 0; border-radius: 10px; color: #1e5aad; background: #fff; font-size: 12px; font-weight: 800; box-shadow: 0 4px 12px rgba(55, 113, 163, .08); }
+.mobile-nav { display: none; }
+.dialog-backdrop { position: fixed; inset: 0; z-index: 60; display: grid; place-items: center; padding: 20px; background: rgba(17, 37, 62, .42); backdrop-filter: blur(5px); }
+.edit-dialog { width: min(100%, 430px); padding: 24px; border: 1px solid #e3eaf2; border-radius: 20px; background: #fff; box-shadow: 0 26px 80px rgba(18, 43, 76, .2); }.edit-dialog input { margin-top: 20px; }.dialog-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
+.onboarding-card { width: min(100%, 478px); position: relative; padding: 32px; text-align: center; border: 1px solid rgba(255,255,255,.75); border-radius: 26px; background: rgba(255,255,255,.97); box-shadow: 0 30px 100px rgba(15, 45, 83, .25); }.close-onboarding { position: absolute; top: 17px; right: 17px; display: grid; place-items: center; width: 32px; height: 32px; border: 0; border-radius: 10px; color: #7a8ca2; background: #f3f6fa; }.onboarding-progress { display: flex; gap: 5px; justify-content: center; }.onboarding-progress span { width: 30px; height: 4px; border-radius: 99px; background: #e3ebf3; }.onboarding-progress span.filled { background: #1d4ed8; }.onboarding-art { position: relative; display: grid; place-items: center; height: 150px; margin: 18px 0 6px; }.onboarding-icon { position: relative; z-index: 2; width: 72px; height: 72px; display: grid; place-items: center; color: white; border-radius: 24px; background: linear-gradient(145deg, #164ba6, #2bc4be); box-shadow: 0 15px 30px rgba(27, 91, 174, .22); }.onboarding-orbit { position: absolute; border: 1px solid #c9e4f6; border-radius: 50%; }.orbit-one { width: 130px; height: 80px; transform: rotate(-22deg); }.orbit-two { width: 200px; height: 120px; transform: rotate(30deg); border-color: #d8f1ed; }.onboarding-card h2 { margin-top: 9px; font-size: 25px; letter-spacing: -.05em; }.onboarding-card > p { max-width: 340px; margin: 10px auto 0; color: #7789a0; font-size: 14px; line-height: 1.55; }.onboarding-cta { width: 100%; justify-content: center; gap: 9px; margin-top: 22px; border-radius: 12px; background: #1d4ed8; }.skip-button { margin-top: 15px; border: 0; color: #8b9aae; background: transparent; font-size: 11px; }.focus-options { display: grid; gap: 8px; margin-top: 19px; }.focus-options button { display: flex; align-items: center; justify-content: space-between; padding: 11px 13px; border: 1px solid #dfe7ef; border-radius: 11px; color: #55708e; background: #fbfdff; text-align: left; font-size: 12px; }.focus-options button.selected { border-color: #9cc5f4; color: #1d4f98; background: #edf5ff; }.onboarding-example { display: flex; align-items: center; gap: 9px; margin-top: 18px; padding: 13px; border-radius: 12px; color: #4b6a8a; background: #f1f7fb; text-align: left; font-size: 12px; }
+.profile-page { min-height: 100vh; display: grid; place-items: center; padding: 32px 16px; background: radial-gradient(circle at 15% 0%, rgba(203, 234, 255, .58), transparent 28rem), #f7f9fc; }.profile-card { width: min(100%, 560px); padding: 28px; border: 1px solid #dfe8f1; border-radius: 22px; background: #fff; box-shadow: 0 18px 50px rgba(40, 82, 128, .09); }.back-link { display: inline-flex; align-items: center; gap: 7px; color: #52718f; font-size: 12px; font-weight: 700; text-decoration: none; }.profile-heading { display: flex; gap: 14px; align-items: center; margin-top: 30px; }.profile-icon { width: 46px; height: 46px; display: grid; place-items: center; border-radius: 15px; color: #fff; background: linear-gradient(145deg, #1449a5, #2cc5c1); }.profile-heading h1 { margin-top: 7px; font-size: clamp(25px, 6vw, 34px); }.profile-heading p { margin-top: 7px; color: #778aa0; font-size: 13px; line-height: 1.5; }.profile-form { display: grid; gap: 16px; margin-top: 30px; }.profile-form label { display: grid; gap: 7px; color: #385572; font-size: 12px; font-weight: 800; }.profile-form input { min-height: 44px; }.profile-form button { justify-content: center; gap: 8px; margin-top: 4px; }.profile-message { margin-top: 28px; padding: 14px; border-radius: 12px; color: #52718f; background: #eff6ff; font-size: 13px; }
+@keyframes pulse { 50% { box-shadow: 0 0 0 6px rgba(224,92,104,.15); } } @keyframes bounce { 50% { transform: translateY(-3px); opacity: .6; } }
+@media (max-width: 920px) { .side-nav { display: none; } .app-grid { display: block; } .main-content { padding-bottom: 100px; } .mobile-nav { position: fixed; left: 14px; right: 14px; bottom: max(14px, env(safe-area-inset-bottom)); z-index: 30; display: flex; justify-content: space-around; padding: 8px; border: 1px solid rgba(215, 227, 238, .9); border-radius: 17px; background: rgba(255,255,255,.9); box-shadow: 0 10px 30px rgba(23, 59, 98, .12); backdrop-filter: blur(15px); }.mobile-nav button, .mobile-profile-link { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; min-height: 42px; padding: 5px 12px; border: 0; color: #8a9aad; background: transparent; font-size: 10px; text-decoration: none; }.mobile-nav button.active, .mobile-profile-link:hover { color: #1d4ed8; } }
+@media (max-width: 640px) { .profile-card { padding: 22px 18px; border-radius: 18px; }.profile-heading { align-items: flex-start; } }
+@media (max-width: 640px) { .topbar { height: 62px; padding: 0 17px; }.demo-pill { display: none; }.main-content { padding: 32px 16px 100px; }.hero-row { align-items: flex-start; flex-direction: column; margin-bottom: 25px; }.hero-stat { align-self: stretch; justify-content: flex-start; }.command-card { padding: 18px; border-radius: 18px; }.command-top { align-items: flex-start; flex-wrap: wrap; }.ai-picker { order: 3; width: 100%; margin-left: 52px; }.ai-picker select { width: 100%; }.command-input-wrap { gap: 6px; padding-left: 11px; }.command-input-wrap input { font-size: 16px; }.prompt-row { flex-wrap: nowrap; overflow-x: auto; padding-bottom: 3px; }.prompt-row button { flex: 0 0 auto; }.section-heading { align-items: flex-end; }.section-heading h2 { font-size: 20px; }.outline-action { padding: 8px; font-size: 11px; }.radar-grid { grid-template-columns: 1fr; gap: 11px; }.lower-grid { grid-template-columns: 1fr; }.conversation-panel, .next-panel { padding: 17px; }.onboarding-card { padding: 25px 20px; border-radius: 22px; }.onboarding-card h2 { font-size: 22px; }.onboarding-art { height: 125px; }.orbit-two { width: 170px; }.card-actions { gap: 10px; } }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; transition-duration: .01ms !important; } }
+
+.access-help { margin-top: 18px; padding: 18px; border: 1px solid rgba(31, 61, 90, .16); border-radius: 16px; background: rgba(247, 250, 255, .86); display: grid; gap: 8px; }
+.access-help strong { color: #17324d; font-size: 15px; }
+.access-help p { margin: 0; color: #5d7184; font-size: 13px; }
+.access-help a { color: #1857d8; font-weight: 700; overflow-wrap: anywhere; }
+.access-help small { color: #5d7184; line-height: 1.55; }
+.dark .access-help { border-color: rgba(148, 163, 184, .25); background: rgba(20, 31, 48, .9); }
+.dark .access-help strong { color: #e8f1ff; }
+.dark .access-help p, .dark .access-help small { color: #b4c1d1; }
+@media (max-width: 640px) { .access-help { padding: 15px; } .access-help small { font-size: 12px; } }
+
+.memory-settings { margin-top: 18px; padding: 18px; border: 1px solid rgba(31, 61, 90, .16); border-radius: 16px; background: #fbfdff; display: grid; gap: 10px; }
+.memory-settings strong { color: #17324d; font-size: 15px; }
+.memory-settings p { color: #5d7184; font-size: 13px; line-height: 1.5; }
+.memory-entry { display: flex; gap: 8px; align-items: center; }
+.memory-entry input { min-height: 42px; flex: 1; min-width: 0; }
+.memory-entry button { white-space: nowrap; }
+.memory-list { display: grid; gap: 7px; }
+.memory-row { display: flex; align-items: center; gap: 8px; padding: 9px 10px; border-radius: 10px; color: #3e5872; background: #eef5fb; font-size: 12px; }
+.memory-row span { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.memory-row button { display: grid; place-items: center; border: 0; color: #7890aa; background: transparent; }
+.memory-row button:hover { color: #d34e63; }
+.dark .memory-settings { border-color: rgba(148, 163, 184, .25); background: rgba(20, 31, 48, .9); }
+.dark .memory-settings strong { color: #e8f1ff; }
+.dark .memory-settings p { color: #b4c1d1; }
+.dark .memory-row { color: #c6d2df; background: rgba(51, 65, 85, .6); }
+@media (max-width: 560px) { .memory-entry { align-items: stretch; flex-direction: column; } .memory-entry button { width: 100%; justify-content: center; } }
+
+.theme-settings { margin-top: 18px; padding: 18px; display: flex; align-items: center; justify-content: space-between; gap: 14px; border: 1px solid rgba(31, 61, 90, .16); border-radius: 16px; background: #f7fbff; }
+.theme-settings strong { color: #17324d; font-size: 15px; }
+.theme-settings p { margin-top: 4px; color: #5d7184; font-size: 13px; }
+.theme-settings button { display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; }
+.dark body, .dark .profile-page { background: #0f1726; color: #e8f1ff; }
+.dark .profile-card { border-color: rgba(148, 163, 184, .25); background: #162236; box-shadow: 0 18px 50px rgba(0, 0, 0, .24); }
+.dark .profile-heading h1, .dark .profile-form label { color: #e8f1ff; }
+.dark .profile-heading p, .dark .back-link { color: #b4c1d1; }
+.dark .profile-form input { border-color: rgba(148, 163, 184, .35); color: #e8f1ff; background: #1c2b42; }
+.dark .theme-settings { border-color: rgba(148, 163, 184, .25); background: #1c2b42; }
+.dark .theme-settings strong { color: #e8f1ff; }
+.dark .theme-settings p { color: #b4c1d1; }
+@media (max-width: 560px) { .theme-settings { align-items: flex-start; flex-direction: column; } .theme-settings button { width: 100%; justify-content: center; } }
+
+.provider-key-settings { margin-top: 18px; padding: 18px; border: 1px solid rgba(31, 61, 90, .16); border-radius: 16px; background: #fbfdff; display: grid; gap: 12px; }
+.provider-key-settings strong { color: #17324d; font-size: 15px; }
+.provider-key-settings > p { color: #5d7184; font-size: 13px; line-height: 1.5; }
+.provider-key-row { display: grid; gap: 8px; padding-top: 8px; border-top: 1px solid #e7edf4; }
+.provider-key-row label { display: grid; gap: 6px; color: #385572; font-size: 12px; font-weight: 800; }
+.provider-key-row input { min-height: 42px; }
+.provider-key-actions { display: flex; gap: 8px; }
+.provider-key-actions button { min-height: 38px; }
+.dark .provider-key-settings { border-color: rgba(148, 163, 184, .25); background: rgba(20, 31, 48, .9); }
+.dark .provider-key-settings strong, .dark .provider-key-row label { color: #e8f1ff; }
+.dark .provider-key-settings > p { color: #b4c1d1; }
+.dark .provider-key-row { border-color: rgba(148, 163, 184, .2); }
+
+.brand-mark img { width: 24px; height: 24px; object-fit: contain; border-radius: 8px; }
+.onboarding-icon img { width: 52px; height: 52px; object-fit: contain; border-radius: 16px; }
+
+.dark .vida-shell { background: radial-gradient(circle at 90% 0%, rgba(20, 70, 110, .42), transparent 30rem), #0f1726; }
+.dark .topbar { border-color: rgba(148, 163, 184, .2); background: rgba(15, 23, 38, .86); }
+.dark .brand-lockup, .dark h1, .dark h2, .dark h3, .dark .command-top strong { color: #e8f1ff; }
+.dark .side-nav { border-color: rgba(148, 163, 184, .2); }
+.dark .nav-item { color: #a8b7c8; }
+.dark .nav-item:hover, .dark .nav-item.active { color: #bcd4ff; background: rgba(37, 99, 235, .2); }
+.dark .hero-subtitle, .dark .section-heading p, .dark .command-top p, .dark .radar-card p, .dark .next-panel p { color: #aebccd; }
+.dark .hero-stat, .dark .command-card, .dark .radar-card, .dark .conversation-panel, .dark .next-panel { border-color: rgba(148, 163, 184, .2); background: #162236; color: #e8f1ff; }
+.dark .command-card { background: linear-gradient(135deg, #162236, #172b43); }
+.dark .command-input-wrap { border-color: rgba(148, 163, 184, .25); background: #1c2b42; }
+.dark .command-input-wrap input { color: #e8f1ff; background: transparent; }
+.dark .ai-picker select { border-color: rgba(148, 163, 184, .3); color: #d7e8ff; background: #1c2b42; }
+.dark .prompt-row button, .dark .outline-action { border-color: rgba(148, 163, 184, .25); color: #b4c1d1; background: #1c2b42; }
+.dark .chat-bubble { color: #c6d2df; background: #22334b; }
+.dark .empty-state { border-color: rgba(148, 163, 184, .25); color: #b4c1d1; background: rgba(22, 34, 54, .7); }
+
+.memory-filters { display: grid; grid-template-columns: 1fr 180px; gap: 8px; }
+.memory-filters select { min-height: 42px; padding: 0 10px; border: 1px solid #9aa9b7; border-radius: 8px; color: #3e5872; background: #fff; font-size: 13px; }
+.dark .memory-filters select { border-color: rgba(148, 163, 184, .35); color: #e8f1ff; background: #1c2b42; }
+@media (max-width: 560px) { .memory-filters { grid-template-columns: 1fr; } }
+.voice-status { display: inline-flex; align-items: center; gap: 6px; margin: 9px 4px 0; color: #637c98; font-size: 10px; font-weight: 700; }
+.voice-status.voice-listening, .voice-status.voice-wake, .voice-status.voice-conversation { color: #168b77; }
+.voice-status.voice-speaking { color: #536f9b; }
+.voice-status.voice-permission, .voice-status.voice-error { color: #bd6c25; }
+
+/* IRIS visual shell v5.1 — layout aligned to the reference PWA */
+.vida-shell { background: radial-gradient(circle at 92% 0%, rgba(203, 234, 255, .58), transparent 30rem), #f8fafc; }
+.topbar { height: 70px; padding: 0 34px; border-bottom: 1px solid rgba(215, 225, 236, .72); }
+.brand-lockup { font-size: 15px; letter-spacing: .28em; }
+.brand-mark { width: 38px; height: 38px; border-radius: 13px; }
+.brand-mark img { width: 28px; height: 28px; }
+.demo-pill { display: none; }
+.app-grid { display: block; max-width: 980px; margin: 0 auto; }
+.side-nav { display: none; }
+.main-content { width: 100%; max-width: 980px; margin: 0 auto; padding: 44px 32px 118px; }
+.hero-row { display: block; margin-bottom: 28px; }
+.hero-row .hero-stat { margin-top: 30px; width: fit-content; }
+h1 { font-size: clamp(32px, 5vw, 46px); }
+.hero-subtitle { font-size: 15px; }
+.hero-stat { padding: 11px 16px; border-radius: 14px; background: rgba(255,255,255,.78); }
+.hero-stat span { font-size: 30px; }
+.command-card { border-radius: 20px; padding: 22px; }
+.radar-section { margin-top: 44px; }
+.radar-grid { grid-template-columns: 1fr; gap: 13px; }
+.radar-card { padding: 17px 18px 13px; }
+.lower-grid { grid-template-columns: 1fr; gap: 14px; }
+.mobile-interpreter-link { color: #aebcff; }
+@media (max-width: 640px) {
+  .topbar { height: 62px; padding: 0 17px; }
+  .main-content { padding: 34px 16px 112px; }
+  .hero-row { margin-bottom: 24px; }
+  .hero-row .hero-stat { margin-top: 24px; }
+  .command-card { padding: 18px; border-radius: 18px; }
+  .mobile-nav { width: calc(100vw - 24px); bottom: max(10px, env(safe-area-inset-bottom)); }
+  .mobile-nav button, .mobile-profile-link { padding: 5px 9px; }
+}
+
+/* IRIS 5.2 — command-center visual system */
+.vida-shell { background: #090d14; color: #dbe6f5; }
+.topbar { height: 82px; padding: 0 56px; background: rgba(8, 12, 19, .94); border-bottom: 1px solid rgba(102, 121, 155, .16); }
+.brand-lockup { color: #eef5ff; letter-spacing: 0; gap: 12px; }
+.brand-copy { display: grid; gap: 1px; }
+.brand-copy > div { display: flex; align-items: center; gap: 9px; }
+.brand-copy b { padding: 2px 7px; border: 1px solid rgba(124, 147, 255, .38); border-radius: 8px; color: #aebcff; font: 600 10px Manrope, sans-serif; }
+.brand-copy small { color: #7f8ca2; font-size: 11px; letter-spacing: 0; }
+.brand-mark { width: 42px; height: 42px; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #26317d, #111642); border: 1px solid rgba(102, 91, 255, .5); box-shadow: 0 0 28px rgba(76, 67, 255, .12); }
+.brand-mark img { width: 28px; height: 28px; }
+.topbar-actions { gap: 9px; }
+.top-control { color: #8491a8; }
+.top-control:hover { color: #dfe8ff; background: rgba(83, 94, 126, .14); }
+.top-action, .new-task-button { min-height: 40px; display: inline-flex; align-items: center; gap: 8px; border: 1px solid rgba(111, 127, 158, .25); border-radius: 12px; padding: 0 14px; color: #a9b7cf; background: #111722; font-size: 12px; font-weight: 700; }
+.interpreter-top-action { color: #c7d0ff; border-color: rgba(104, 91, 255, .42); background: rgba(57, 49, 130, .26); }
+.interpreter-top-action:hover { color: #ffffff; border-color: rgba(122, 109, 255, .7); background: rgba(73, 62, 170, .35); }
+.new-task-button { border-color: transparent; color: white; background: linear-gradient(135deg, #5144ff, #6b43ff); box-shadow: 0 8px 22px rgba(84, 63, 255, .22); }
+.theme-button { width: 38px; height: 38px; border: 0; border-radius: 50%; color: #ffd33d; background: transparent; display: grid; place-items: center; }
+.avatar { color: #cfd7ff; background: #141c37; border: 1px solid #27356e; }
+.app-grid { display: block; max-width: 1180px; margin: 0 auto; }
+.side-nav { display: none; }
+.main-content { max-width: 1120px; margin: 0 auto; padding: 38px 34px 110px; }
+.eyebrow { color: #78859c; }
+h1, h2, h3 { color: #eef3fb; }
+h1 { font-size: clamp(31px, 4vw, 43px); }
+.hero-subtitle, .section-heading p, .command-top p, .radar-card p, .next-panel p { color: #8390a5; }
+.hero-row { margin-bottom: 23px; }
+.voice-command-panel { margin-bottom: 18px; padding: 17px 18px 14px; border: 1px solid rgba(108, 124, 160, .2); border-radius: 22px; background: #101620; box-shadow: 0 20px 55px rgba(0,0,0,.18); }
+.voice-panel-main { display: flex; align-items: center; gap: 12px; }
+.voice-orb { width: 42px; height: 42px; display: grid; place-items: center; flex: 0 0 auto; border-radius: 50%; color: #8797ff; background: #171a4a; border: 1px solid #323b7d; }
+.voice-orb.active { color: #fff; background: #4337d9; box-shadow: 0 0 0 6px rgba(84, 67, 255, .12); }
+.voice-panel-main strong { color: #dfe8f7; font-size: 14px; }
+.voice-panel-main p { margin-top: 4px; color: #7f8ca2; font-size: 11px; }
+.voice-panel-main b { color: #7183ff; }
+.paused-pill { display: inline-flex; margin-left: 7px; padding: 3px 7px; border: 1px solid rgba(108, 123, 157, .22); border-radius: 999px; color: #8896aa; font-size: 8px; font-weight: 800; }
+.voice-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+.voice-actions button, .biometric-pill { min-height: 31px; display: inline-flex; align-items: center; gap: 6px; padding: 0 10px; border: 1px solid rgba(105, 123, 164, .22); border-radius: 9px; color: #9ba9c1; background: #141a25; font-size: 10px; }
+.voice-actions button:first-of-type { color: #aeb8ff; border-color: rgba(91, 77, 255, .32); }
+.voice-actions .danger-voice { color: #ff8c9a; border-color: rgba(255, 83, 106, .25); }
+.biometric-pill { color: #9aa7ff; background: #151b3d; }
+.command-card { padding: 18px; border: 1px solid rgba(82, 91, 255, .32); border-radius: 22px; background: #0d1420; box-shadow: 0 20px 60px rgba(37, 30, 130, .12); }
+.command-heading { display: flex; justify-content: space-between; margin-bottom: 10px; }
+.command-heading > div { display: flex; align-items: center; justify-content: space-between; width: 100%; }
+.command-section-title { display: flex; align-items: center; gap: 9px; color: #aeb9ca; font: 800 13px Manrope, sans-serif; letter-spacing: .03em; }
+.command-section-title svg { color: #6c7cff; }
+.command-heading span { color: #7e8ba1; font-size: 10px; }
+.command-top { display: flex; align-items: center; gap: 12px; }
+.command-top strong { color: #e7eef9; }
+.command-icon { background: linear-gradient(145deg, #2d2a88, #405dff); }
+.ai-picker { margin-left: auto; }
+.ai-picker select { border-color: rgba(109, 127, 164, .28); color: #9dafff; background: #151b28; }
+.ai-badge { color: #9ca9ff; background: #171d42; }
+.command-input-wrap { margin-top: 13px; border-color: rgba(100, 118, 159, .2); background: #0e1420; }
+.command-input-wrap input { color: #e3eafa; background: transparent; }
+.command-input-wrap input::placeholder { color: #78869d; }
+.mic-button, .send-button { color: #a8b4ff; background: #171d38; }
+.send-button { background: #4a3ce7; }
+.prompt-row button { color: #929fb4; border-color: rgba(99, 116, 153, .18); background: #121925; }
+.radar-section { margin-top: 27px; }
+.section-heading h2 { font-size: 22px; }
+.outline-action { color: #aebaff; border-color: rgba(95, 83, 255, .35); background: #121735; }
+.radar-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-top: 18px; }
+.stat-card { position: relative; min-height: 112px; padding: 17px; border: 1px solid rgba(104, 119, 150, .19); border-radius: 18px; background: #0f151f; }
+.stat-card span { color: #91a0b5; font-size: 12px; }
+.stat-card svg { position: absolute; top: 17px; right: 17px; color: #6c7cff; }
+.stat-card:nth-child(2) svg { color: #ffc400; }
+.stat-card:nth-child(3) svg { color: #14bfff; }
+.stat-card:nth-child(4) svg { color: #00e6a0; }
+.stat-card strong { display: block; margin-top: 17px; color: #f2f6ff; font: 800 30px Manrope, sans-serif; }
+.radar-toolbar { display: flex; gap: 12px; margin-top: 18px; }
+.radar-search { flex: 1; display: flex; align-items: center; gap: 9px; min-width: 0; padding: 0 14px; border: 1px solid rgba(104, 119, 150, .17); border-radius: 13px; background: #111722; color: #8492aa; }
+.radar-search input { width: 100%; min-height: 44px; border: 0; outline: 0; color: #e6edf8; background: transparent; font-size: 12px; }
+.radar-search input::placeholder { color: #6e7c92; }
+.new-radar-button { display: inline-flex; align-items: center; gap: 7px; padding: 0 15px; border: 0; border-radius: 11px; color: white; background: #4c3df0; font-size: 12px; font-weight: 800; white-space: nowrap; }
+.filter-row, .category-row { display: flex; gap: 8px; overflow-x: auto; scrollbar-width: none; margin-top: 13px; }
+.filter-row button, .category-row button { min-height: 31px; padding: 0 13px; border: 1px solid rgba(99, 116, 153, .12); border-radius: 999px; color: #8c9ab0; background: #0e141e; font-size: 10px; font-weight: 700; white-space: nowrap; }
+.filter-row button.selected, .category-row button.selected { color: #b9b8ff; border-color: rgba(89, 76, 255, .45); background: #3229aa; }
+.category-row button.selected { background: #171d42; }
+.radar-grid { grid-template-columns: 1fr; gap: 11px; margin-top: 14px; }
+.radar-card { padding: 16px 18px 13px; border-color: rgba(100, 116, 151, .17); background: #0e141d; }
+.radar-card h3 { color: #edf2fa; }
+.radar-card .date-label { color: #8b98ad; }
+.card-actions button { color: #7f8ca0; }
+.conversation-panel, .next-panel { border-color: rgba(100, 116, 151, .17); background: #0f151f; }
+.chat-bubble { color: #c6d0df; background: #151e2b; }
+.empty-state { border-color: rgba(100, 116, 151, .17); color: #8997ac; background: #0d131c; }
+.mobile-nav { background: rgba(13, 18, 27, .94); border-color: rgba(111, 126, 159, .22); box-shadow: 0 12px 34px rgba(0,0,0,.35); }
+.mobile-nav button, .mobile-profile-link { color: #7f8da5; }
+.mobile-nav button.active, .mobile-profile-link:hover { color: #9ea8ff; }
+@media (max-width: 820px) { .topbar { padding: 0 18px; }.top-action { display: none; }.main-content { padding: 28px 18px 100px; }.radar-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }.voice-actions { gap: 6px; } }
+@media (max-width: 560px) { .brand-copy small { display: none; }.new-task-button { font-size: 0; width: 40px; justify-content: center; padding: 0; }.main-content { padding: 24px 13px 100px; }.voice-command-panel { border-radius: 18px; }.voice-panel-main { align-items: flex-start; }.command-heading > div { align-items: flex-start; gap: 12px; flex-direction: column; }.ai-picker { margin-left: 0; width: 100%; }.radar-stats { gap: 8px; }.stat-card { min-height: 100px; padding: 13px; }.stat-card strong { margin-top: 13px; }.radar-toolbar { flex-direction: column; }.new-radar-button { min-height: 42px; justify-content: center; } }
+
+.demo-radar-notice{display:flex;align-items:center;gap:8px;margin:10px 0 14px;padding:9px 12px;border:1px solid rgba(99,102,241,.28);border-radius:10px;background:rgba(79,70,229,.08);font-size:12px;color:var(--muted,#94a3b8)}
+.interpreter-shell { min-height: 100vh; }
+.interpreter-page { max-width: 920px; margin: 0 auto; padding: 56px 24px 90px; }
+.interpreter-page h1 { font-size: clamp(32px, 5vw, 50px); margin-top: 10px; }
+.interpreter-card { margin-top: 34px; padding: 26px; border: 1px solid #dbe7f2; border-radius: 24px; background: rgba(255,255,255,.9); box-shadow: 0 18px 50px rgba(40,82,128,.09); }
+.language-row { display:grid; grid-template-columns:1fr 50px 1fr; gap:14px; align-items:end; }
+.language-box { display:flex; flex-direction:column; gap:7px; }
+.language-box label { color:#8291a4; font-size:11px; font-weight:800; text-transform:uppercase; letter-spacing:.08em; }
+.language-box select { height:46px; padding:0 13px; border:1px solid #cfdeec; border-radius:12px; background:#f8fbfe; color:#173c69; font-weight:700; outline:none; }
+.swap-language { width:46px; height:46px; border:1px solid #d5e2ef; border-radius:12px; background:#fff; color:#2862a4; display:grid; place-items:center; }
+.swap-language:hover { background:#eef5ff; }
+.interpreter-status { display:flex; align-items:center; justify-content:center; gap:8px; margin:22px 0 14px; color:#6c7e94; font-size:12px; font-weight:700; }
+.interpreter-status.live { color:#1d756a; }
+.interpreter-panels { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+.speech-panel { min-height:180px; padding:18px; border:1px solid #e0e9f2; border-radius:17px; background:#f9fbfd; }
+.speech-panel.output { background:#f2fbfa; border-color:#d7eee9; }
+.speech-panel span { color:#8191a5; font-size:10px; font-weight:800; text-transform:uppercase; letter-spacing:.1em; }
+.speech-panel p { margin-top:18px; color:#274667; font-size:20px; line-height:1.5; }
+.speak-again { display:inline-flex; align-items:center; gap:6px; margin-top:18px; border:0; background:transparent; color:#24736c; font-size:11px; font-weight:800; }
+.interpreter-controls { display:flex; justify-content:center; align-items:center; gap:12px; margin-top:20px; flex-wrap:wrap; }
+.interpreter-start, .interpreter-stop { min-width:210px; height:46px; border-radius:13px; }
+.interpreter-stop { background:#d95d69; }
+.voice-toggle { height:44px; padding:0 14px; border:1px solid #d9e4ee; border-radius:12px; background:#fff; color:#74869b; font-size:12px; font-weight:700; display:inline-flex; align-items:center; gap:7px; }
+.voice-toggle.on { color:#1f6c66; background:#eefaf7; border-color:#ccebe4; }
+.interpreter-note { display:flex; align-items:center; justify-content:center; gap:7px; margin-top:18px; color:#8493a5; font-size:11px; text-align:center; }
+.interpreter-error { margin-top:14px; padding:10px 12px; border:1px solid #f2c9ce; border-radius:10px; color:#a44854; background:#fff3f4; font-size:12px; text-align:center; }
+@media (max-width:700px) { .interpreter-page { padding-top:35px; } .language-row { grid-template-columns:1fr; } .swap-language { justify-self:center; transform:rotate(90deg); } .interpreter-panels { grid-template-columns:1fr; } .speech-panel { min-height:135px; } }
+
+/* =========================================================
+   IRIS 5.3 — COMMAND CENTER FINAL
+   ========================================================= */
+
+.command-center {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  margin-bottom: 32px;
+}
+
+.command-center > * {
+  min-width: 0;
+}
+
+.command-top {
+  width: 100%;
+  display: flex;
+  align-items: stretch;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.command-card {
+  flex: 1 1 0;
+  min-width: 240px;
+  padding: 22px;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 20px;
+  background: linear-gradient(
+    145deg,
+    rgba(30, 45, 70, 0.72),
+    rgba(15, 23, 42, 0.92)
+  );
+}
+
+.command-card h3,
+.command-card h2,
+.command-card p {
+  margin-top: 0;
+}
+
+.command-input-wrap {
+  width: 100%;
+}
+
+.command-input {
+  width: 100%;
+  min-height: 58px;
+}
+
+.command-center .section-heading {
+  margin-bottom: 4px;
+}
+
+.command-center .next-panel {
+  width: 100%;
+}
+
+@media (max-width: 920px) {
+  .command-top {
+    flex-direction: column;
+  }
+
+  .command-card {
+    width: 100%;
+    min-width: 0;
+  }
+}
+
+/* Desktop: menu inferior nunca aparece */
+@media (min-width: 921px) {
+  .mobile-nav {
+    display: none !important;
+  }
+}
+
+/* Mobile: menu inferior aparece somente no mobile */
+@media (max-width: 920px) {
+  .mobile-nav {
+    position: fixed;
+    left: 14px;
+    right: 14px;
+    bottom: max(14px, env(safe-area-inset-bottom));
+    z-index: 40;
+    display: flex;
+    justify-content: space-around;
+    align-items: center;
+    padding: 8px;
+    border: 1px solid rgba(215, 227, 238, 0.16);
+    border-radius: 18px;
+    background: rgba(13, 18, 27, 0.94);
+    box-shadow: 0 12px 34px rgba(0, 0, 0, 0.35);
+    backdrop-filter: blur(16px);
+  }
+}
+
+/* =========================================================
+   IRIS 5.3 — COMMAND CENTER
+   Camada visual final — preserva a lógica existente
+   ========================================================= */
+
+.command-card {
+  position: relative;
+  overflow: hidden;
+  padding: 28px !important;
+  border: 1px solid rgba(122, 145, 190, .22) !important;
+  border-radius: 24px !important;
+  background:
+    radial-gradient(circle at 90% 0%, rgba(92, 70, 255, .14), transparent 32%),
+    linear-gradient(145deg, rgba(27, 45, 72, .98), rgba(15, 24, 39, .98)) !important;
+  box-shadow:
+    0 24px 70px rgba(0, 0, 0, .22),
+    inset 0 1px 0 rgba(255,255,255,.04);
+}
+
+.command-card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(90deg, transparent 0%, rgba(116, 105, 255, .06) 50%, transparent 100%);
+  opacity: .8;
+}
+
+.command-card > * {
+  position: relative;
+  z-index: 1;
+}
+
+.command-heading {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 20px !important;
+  margin-bottom: 24px !important;
+  padding-bottom: 18px;
+  border-bottom: 1px solid rgba(148, 163, 184, .12);
+}
+
+.command-section-title {
+  display: flex !important;
+  align-items: center;
+  gap: 9px;
+  color: #aebfff;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+}
+
+.command-heading > span {
+  color: #7f91b3 !important;
+  font-size: 12px !important;
+  white-space: nowrap;
+}
+
+.command-top {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) auto !important;
+  align-items: center !important;
+  gap: 20px !important;
+  margin-bottom: 20px !important;
+}
+
+.command-icon {
+  width: 52px !important;
+  height: 52px !important;
+  min-width: 52px;
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+  border-radius: 16px !important;
+  background: linear-gradient(145deg, #5146e5, #6d5dfc) !important;
+  box-shadow: 0 10px 28px rgba(79, 70, 229, .30);
+}
+
+.command-top strong {
+  display: block;
+  margin-bottom: 5px;
+  font-size: 21px !important;
+  line-height: 1.2;
+  color: #f4f7ff !important;
+}
+
+.command-top p {
+  margin: 0 !important;
+  color: #8fa2c6 !important;
+  font-size: 13px !important;
+}
+
+.ai-picker {
+  min-width: 220px !important;
+}
+
+.ai-picker select {
+  width: 100%;
+  min-height: 44px;
+  padding: 0 38px 0 14px;
+  border: 1px solid rgba(126, 143, 181, .25);
+  border-radius: 12px;
+  background: rgba(10, 18, 32, .65);
+  color: #eaf0ff;
+  outline: none;
+}
+
+.ai-badge {
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  margin-left: 8px;
+  padding: 0 14px;
+  border-radius: 12px;
+  background: rgba(77, 63, 220, .22);
+  color: #aeb4ff;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.command-input-wrap {
+  display: flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+  min-height: 68px;
+  padding: 8px 10px 8px 18px !important;
+  border: 1px solid rgba(125, 145, 185, .24) !important;
+  border-radius: 18px !important;
+  background: rgba(7, 14, 27, .48) !important;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.025);
+  transition: border-color .2s ease, box-shadow .2s ease;
+}
+
+.command-input-wrap:focus-within {
+  border-color: rgba(111, 97, 255, .65) !important;
+  box-shadow:
+    0 0 0 3px rgba(99, 82, 255, .10),
+    inset 0 1px 0 rgba(255,255,255,.03);
+}
+
+.command-input-wrap input {
+  flex: 1 !important;
+  min-width: 0;
+  height: 50px;
+  border: 0 !important;
+  outline: 0 !important;
+  background: transparent !important;
+  color: #f4f7ff !important;
+  font-size: 15px !important;
+}
+
+.command-input-wrap input::placeholder {
+  color: #687b9e !important;
+}
+
+.attach-button,
+.mic-button,
+.send-button {
+  width: 46px !important;
+  height: 46px !important;
+  min-width: 46px !important;
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
+  border-radius: 13px !important;
+}
+
+.attach-button,
+.mic-button {
+  border: 1px solid rgba(125, 145, 185, .15) !important;
+  background: rgba(28, 42, 65, .65) !important;
+  color: #9eb0d1 !important;
+}
+
+.send-button {
+  border: 0 !important;
+  background: linear-gradient(135deg, #5546ed, #6547ff) !important;
+  color: white !important;
+  box-shadow: 0 8px 22px rgba(86, 70, 240, .28);
+}
+
+.send-button:hover {
+  transform: translateY(-1px);
+}
+
+.voice-status {
+  min-height: 30px;
+  margin-top: 12px;
+  display: flex !important;
+  align-items: center;
+  gap: 8px;
+  color: #7f93b7 !important;
+  font-size: 12px !important;
+}
+
+.voice-status::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #63748f;
+  box-shadow: 0 0 0 4px rgba(99,116,143,.10);
+}
+
+.prompt-row {
+  display: flex !important;
+  flex-wrap: wrap !important;
+  gap: 9px !important;
+  margin-top: 16px !important;
+}
+
+.prompt-row button {
+  min-height: 38px;
+  padding: 0 14px !important;
+  border: 1px solid rgba(122, 144, 184, .20) !important;
+  border-radius: 999px !important;
+  background: rgba(29, 44, 68, .55) !important;
+  color: #aebedb !important;
+  font-size: 12px !important;
+  transition: all .18s ease;
+}
+
+.prompt-row button:hover {
+  border-color: rgba(110, 97, 255, .55) !important;
+  background: rgba(82, 68, 220, .14) !important;
+  color: #dce3ff !important;
+}
+
+/* Voz */
+.voice-panel {
+  position: relative;
+  overflow: hidden;
+  padding: 22px !important;
+  border-radius: 22px !important;
+  border: 1px solid rgba(105, 126, 166, .20) !important;
+  background: linear-gradient(145deg, rgba(18, 29, 48, .96), rgba(12, 20, 34, .96)) !important;
+}
+
+.voice-panel-main {
+  display: flex !important;
+  align-items: center !important;
+  gap: 16px !important;
+}
+
+.voice-orb {
+  width: 52px !important;
+  height: 52px !important;
+  min-width: 52px;
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: rgba(74, 62, 219, .18) !important;
+  border: 1px solid rgba(111, 97, 255, .30);
+}
+
+.voice-panel-main strong {
+  display: block;
+  color: #eaf0ff;
+  font-size: 16px;
+}
+
+.voice-panel-main p {
+  margin: 5px 0 0;
+  color: #7e92b5;
+  font-size: 12px;
+}
+
+.voice-actions {
+  display: flex !important;
+  flex-wrap: wrap !important;
+  gap: 8px !important;
+  margin-top: 16px !important;
+}
+
+.voice-actions button {
+  min-height: 38px;
+  border-radius: 11px !important;
+}
+
+/* Estado geral do Command Center */
+.iris-state-pill {
+  display: inline-flex !important;
+  align-items: center;
+  gap: 8px;
+  min-height: 30px;
+  padding: 5px 11px;
+  border: 1px solid rgba(112, 130, 166, .20);
+  border-radius: 999px;
+  background: rgba(18, 29, 48, .60);
+  color: #aabbd8;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.iris-state-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #36d399;
+  box-shadow: 0 0 0 4px rgba(54,211,153,.10);
+}
+
+/* Command Center desktop */
+@media (min-width: 921px) {
+  .command-card {
+    margin-top: 18px;
+  }
+
+  .voice-panel {
+    margin-bottom: 18px;
+  }
+}
+
+/* Command Center mobile */
+@media (max-width: 920px) {
+  .command-heading {
+    align-items: flex-start !important;
+    flex-direction: column !important;
+  }
+
+  .command-heading > span {
+    white-space: normal !important;
+  }
+
+  .command-top {
+    grid-template-columns: 1fr !important;
+  }
+
+  .ai-picker {
+    width: 100% !important;
+    min-width: 0 !important;
+  }
+
+  .ai-badge {
+    margin-left: 0;
+    margin-top: 8px;
+  }
+
+  .command-input-wrap {
+    min-height: 62px;
+    padding-left: 12px !important;
+  }
+
+  .command-input-wrap input {
+    font-size: 14px !important;
+  }
+
+  .voice-panel-main {
+    align-items: flex-start !important;
+  }
+
+  .voice-actions {
+    margin-left: 0 !important;
+  }
+}
+
+
+/* =========================================================
+   IRIS 5.3 — COMMAND CENTER LAYOUT FIX
+   Somente apresentação — não altera lógica
+   ========================================================= */
+
+.command-card {
+  width: 100%;
+}
+
+.command-card .hero-row,
+.command-card .iris-command-grid,
+.iris-command-grid {
+  display: grid !important;
+  grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+  gap: 14px !important;
+  align-items: stretch !important;
+  width: 100% !important;
+}
+
+.command-card .hero-stat,
+.iris-command-grid .hero-stat {
+  min-width: 0 !important;
+  width: auto !important;
+  padding: 16px 18px !important;
+  border: 1px solid rgba(122, 145, 190, .18) !important;
+  border-radius: 16px !important;
+  background: rgba(18, 29, 49, .72) !important;
+  box-sizing: border-box !important;
+}
+
+.command-card .hero-stat > div,
+.iris-command-grid .hero-stat > div {
+  min-width: 0 !important;
+}
+
+.command-card .hero-stat span,
+.command-card .hero-stat strong,
+.command-card .hero-stat small {
+  display: block !important;
+  white-space: normal !important;
+  overflow-wrap: anywhere !important;
+}
+
+.command-card .iris-command-actions {
+  display: flex !important;
+  flex-wrap: wrap !important;
+  gap: 10px !important;
+  margin-top: 18px !important;
+}
+
+.command-card .iris-command-actions button {
+  min-height: 42px !important;
+}
+
+@media (max-width: 1050px) {
+  .command-card .hero-row,
+  .command-card .iris-command-grid,
+  .iris-command-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+}
+
+@media (max-width: 640px) {
+  .command-card .hero-row,
+  .command-card .iris-command-grid,
+  .iris-command-grid {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+
+/* =========================================================
+   IRIS 5.3 — COMMAND CENTER LAYOUT FIX
+   Somente apresentação — não altera lógica
+   ========================================================= */
+
+.command-card {
+  width: 100%;
+}
+
+.command-card .hero-row,
+.command-card .iris-command-grid,
+.iris-command-grid {
+  display: grid !important;
+  grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+  gap: 14px !important;
+  align-items: stretch !important;
+  width: 100% !important;
+}
+
+.command-card .hero-stat,
+.iris-command-grid .hero-stat {
+  min-width: 0 !important;
+  width: auto !important;
+  padding: 16px 18px !important;
+  border: 1px solid rgba(122, 145, 190, .18) !important;
+  border-radius: 16px !important;
+  background: rgba(18, 29, 49, .72) !important;
+  box-sizing: border-box !important;
+}
+
+.command-card .hero-stat > div,
+.iris-command-grid .hero-stat > div {
+  min-width: 0 !important;
+}
+
+.command-card .hero-stat span,
+.command-card .hero-stat strong,
+.command-card .hero-stat small {
+  display: block !important;
+  white-space: normal !important;
+  overflow-wrap: anywhere !important;
+}
+
+.command-card .iris-command-actions {
+  display: flex !important;
+  flex-wrap: wrap !important;
+  gap: 10px !important;
+  margin-top: 18px !important;
+}
+
+.command-card .iris-command-actions button {
+  min-height: 42px !important;
+}
+
+@media (max-width: 1050px) {
+  .command-card .hero-row,
+  .command-card .iris-command-grid,
+  .iris-command-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+}
+
+@media (max-width: 640px) {
+  .command-card .hero-row,
+  .command-card .iris-command-grid,
+  .iris-command-grid {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+
+/* =========================================================
+   IRIS 5.3 APP SHELL
+   Camada compacta + abertura do Command Center
+   ========================================================= */
+
+.iris-app-shell {
+  min-height: 100dvh;
+  width: 100%;
+}
+
+.iris-app-shell-open {
+  min-height: 100dvh;
+}
+
+.iris-shell-interface {
+  min-height: 100dvh;
+  position: relative;
+}
+
+.iris-shell-closebar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 42px;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  background: rgba(8, 14, 27, .94);
+  border-bottom: 1px solid rgba(122, 145, 190, .16);
+  backdrop-filter: blur(18px);
+  color: rgba(220, 228, 245, .65);
+  font-size: 11px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.iris-shell-mini-button,
+.iris-shell-close {
+  border: 1px solid rgba(122, 145, 190, .20);
+  background: rgba(255,255,255,.04);
+  color: #dfe7ff;
+  cursor: pointer;
+  border-radius: 10px;
+}
+
+.iris-shell-mini-button {
+  position: absolute;
+  left: 14px;
+  padding: 5px 9px;
+  font-weight: 700;
+}
+
+.iris-shell-close {
+  position: absolute;
+  right: 14px;
+  width: 28px;
+  height: 28px;
+  font-size: 20px;
+  line-height: 1;
+}
+
+.iris-shell-interface > *:not(.iris-shell-closebar) {
+  padding-top: 42px;
+}
+
+/* Tela compacta */
+
+.iris-app-shell-compact {
+  background:
+    radial-gradient(circle at 50% 28%, rgba(92, 70, 255, .18), transparent 30%),
+    radial-gradient(circle at 50% 75%, rgba(0, 196, 210, .07), transparent 28%),
+    #080e1b;
+  color: #eef3ff;
+}
+
+.iris-compact-screen {
+  min-height: 100dvh;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 32px 22px;
+  box-sizing: border-box;
+  text-align: center;
+}
+
+.iris-orb {
+  width: 104px;
+  height: 104px;
+  border-radius: 32px;
+  border: 1px solid rgba(133, 119, 255, .55);
+  background:
+    radial-gradient(circle at 35% 25%, rgba(255,255,255,.20), transparent 20%),
+    linear-gradient(145deg, #5146ff, #28236f);
+  box-shadow:
+    0 0 0 10px rgba(84, 70, 255, .07),
+    0 22px 70px rgba(63, 55, 220, .30);
+  color: white;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  transition: transform .2s ease, box-shadow .2s ease;
+}
+
+.iris-orb:hover {
+  transform: translateY(-3px) scale(1.03);
+}
+
+.iris-orb:active {
+  transform: scale(.97);
+}
+
+.iris-orb.is-listening {
+  animation: iris-listening-pulse 1.35s infinite;
+}
+
+.iris-orb-star {
+  font-size: 42px;
+  line-height: 1;
+  text-shadow: 0 0 24px rgba(255,255,255,.55);
+}
+
+.iris-compact-brand {
+  margin-top: 24px;
+  font-size: 20px;
+  font-weight: 800;
+  letter-spacing: .20em;
+}
+
+.iris-compact-status {
+  margin-top: 10px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: rgba(215, 225, 246, .68);
+  font-size: 13px;
+}
+
+.iris-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #25d7a2;
+  box-shadow: 0 0 12px rgba(37,215,162,.65);
+}
+
+.iris-status-dot.listening {
+  background: #8b7cff;
+  box-shadow: 0 0 14px rgba(139,124,255,.9);
+}
+
+.iris-compact-screen h1 {
+  margin: 28px 0 8px;
+  font-size: clamp(30px, 7vw, 48px);
+  line-height: 1.08;
+  letter-spacing: -.035em;
+  font-weight: 600;
+}
+
+.iris-compact-hint {
+  margin: 0;
+  color: rgba(206, 217, 240, .64);
+  font-size: 15px;
+}
+
+.iris-compact-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 28px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.iris-compact-actions button {
+  border: 1px solid rgba(122,145,190,.22);
+  background: rgba(255,255,255,.055);
+  color: #e9efff;
+  border-radius: 14px;
+  padding: 12px 17px;
+  cursor: pointer;
+  font-weight: 600;
+  backdrop-filter: blur(12px);
+}
+
+.iris-compact-actions button:first-child {
+  background: linear-gradient(135deg, #584cff, #4036d8);
+  border-color: rgba(140,130,255,.5);
+}
+
+.iris-compact-actions button:hover {
+  filter: brightness(1.1);
+}
+
+.iris-compact-message {
+  max-width: 520px;
+  margin-top: 18px;
+  padding: 11px 15px;
+  border-radius: 14px;
+  background: rgba(255,255,255,.055);
+  border: 1px solid rgba(122,145,190,.16);
+  color: rgba(225,233,250,.78);
+  font-size: 13px;
+}
+
+.iris-compact-command {
+  margin-top: 48px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  color: rgba(194, 207, 234, .48);
+  font-size: 12px;
+}
+
+.iris-compact-command strong {
+  color: rgba(160, 153, 255, .85);
+  font-weight: 600;
+}
+
+@keyframes iris-listening-pulse {
+  0%, 100% {
+    box-shadow:
+      0 0 0 10px rgba(84,70,255,.07),
+      0 22px 70px rgba(63,55,220,.30);
+  }
+
+  50% {
+    box-shadow:
+      0 0 0 22px rgba(84,70,255,.05),
+      0 0 55px rgba(92,80,255,.48);
+  }
+}
+
+@media (max-width: 640px) {
+  .iris-shell-closebar {
+    height: 38px;
+  }
+
+  .iris-shell-interface > *:not(.iris-shell-closebar) {
+    padding-top: 38px;
+  }
+
+  .iris-orb {
+    width: 92px;
+    height: 92px;
+    border-radius: 28px;
+  }
+
+  .iris-compact-screen h1 {
+    font-size: 32px;
+  }
+
+  .iris-compact-actions {
+    width: 100%;
+    max-width: 330px;
+  }
+
+  .iris-compact-actions button {
+    width: 100%;
+  }
+}
+
+/* IRIS 5.4 — Command Center clean layout */
+.ai-picker { display: none !important; }
+.conversation-panel { display: none !important; }
+.next-panel { display: none !important; }
+
+.command-section { margin-bottom: 28px; }
+.radar-section { margin-top: 12px; }
+.radar-toolbar { gap: 12px; }
+.radar-grid { margin-top: 18px; }
+
+@media (max-width: 760px) {
+  .radar-toolbar { flex-wrap: wrap; }
+  .radar-search { min-width: 0; flex: 1 1 100%; }
+  .radar-grid { grid-template-columns: 1fr !important; }
+}
+
+/* IRIS 5.4 — Command Center clean layout */
+.ai-picker { display: none !important; }
+.conversation-panel { display: none !important; }
+.next-panel { display: none !important; }
+
+.command-section { margin-bottom: 28px; }
+.radar-section { margin-top: 12px; }
+.radar-toolbar { gap: 12px; }
+.radar-grid { margin-top: 18px; }
+
+@media (max-width: 760px) {
+  .radar-toolbar { flex-wrap: wrap; }
+  .radar-search { min-width: 0; flex: 1 1 100%; }
+  .radar-grid { grid-template-columns: 1fr !important; }
+}
+
+/* IRIS 5.4 — Command Center clean layout */
+.ai-picker { display: none !important; }
+.conversation-panel { display: none !important; }
+.next-panel { display: none !important; }
+
+.command-section { margin-bottom: 28px; }
+.radar-section { margin-top: 12px; }
+.radar-toolbar { gap: 12px; }
+.radar-grid { margin-top: 18px; }
+
+@media (max-width: 760px) {
+  .radar-toolbar { flex-wrap: wrap; }
+  .radar-search { min-width: 0; flex: 1 1 100%; }
+  .radar-grid { grid-template-columns: 1fr !important; }
+}
+
+/* IRIS 5.4 — interface simplificada */
+.ai-picker {
+  display: none !important;
+}
+
+.conversation-panel {
+  display: none !important;
+}
+
+.next-panel {
+  display: none !important;
+}
+
+.command-card {
+  margin-bottom: 20px;
+}
+
+.command-section {
+  margin-bottom: 24px;
+}
+
+.radar-section {
+  margin-top: 12px;
+}
+
+@media (max-width: 760px) {
+  .radar-toolbar {
+    flex-wrap: wrap;
+  }
+
+  .radar-search {
+    min-width: 0;
+    flex: 1 1 100%;
+  }
+
+  .radar-grid {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+/* =========================================================
+   IRIS 5.4 — AJUSTES VISUAIS FINAIS
+   ========================================================= */
+
+/* Onboarding: contraste e legibilidade */
+.modal-overlay h1,
+.modal-overlay h2,
+.modal-overlay h3,
+.onboarding-modal h1,
+.onboarding-modal h2,
+.onboarding-modal h3 {
+  color: #17233d !important;
+  opacity: 1 !important;
+}
+
+.modal-overlay p,
+.onboarding-modal p,
+.modal-overlay label,
+.onboarding-modal label {
+  color: #52627a !important;
+}
+
+/* Botões principais */
+.modal-overlay button,
+.onboarding-modal button {
+  font-weight: 600;
+}
+
+/* Command Center */
+.command-section-title,
+.section-heading h2 {
+  letter-spacing: -0.02em;
+}
+
+/* Melhor aproveitamento no desktop */
+.radar-grid {
+  gap: 16px;
+}
+
+.radar-card {
+  transition: transform .18s ease, border-color .18s ease,
+              box-shadow .18s ease;
+}
+
+.radar-card:hover {
+  transform: translateY(-2px);
+}
+
+/* Busca do Radar */
+.radar-search input {
+  min-height: 46px;
+}
+
+/* Responsividade */
+@media (min-width: 1100px) {
+  .radar-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .radar-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Estado visual da IRIS */
+.status-tag {
+  transition: all .2s ease;
+}
+
+
+/* =========================================================
+   IRIS 5.4 — CLEAN UI
+   Objetivo: reduzir ruído e criar hierarquia visual.
+   ========================================================= */
+
+/* Container principal */
+main {
+  max-width: 1500px;
+  margin: 0 auto;
+}
+
+/* Cabeçalho do Command Center */
+.command-section {
+  max-width: 1180px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+/* Saudação */
+.command-section h1,
+.command-section h2 {
+  letter-spacing: -0.035em;
+}
+
+/* Evita textos comprimidos */
+.command-section p {
+  max-width: 760px;
+}
+
+/* Blocos superiores de status:
+   transforma em uma faixa limpa e espaçada */
+.command-section > div {
+  box-sizing: border-box;
+}
+
+/* Texto dos indicadores */
+.command-section strong {
+  line-height: 1.25;
+}
+
+/* Área de indicadores */
+.command-section [class*="stats"],
+.command-section [class*="summary"],
+.command-section [class*="overview"] {
+  gap: 18px !important;
+}
+
+/* Cards individuais */
+.command-section [class*="stat"],
+.command-section [class*="metric"] {
+  min-width: 0;
+  padding: 18px !important;
+  border-radius: 16px;
+}
+
+/* Reduz excesso visual */
+.command-section [class*="stat"] p,
+.command-section [class*="metric"] p {
+  line-height: 1.45;
+}
+
+/* Título principal mais limpo */
+.command-section .eyebrow {
+  margin-bottom: 8px;
+}
+
+/* Data e ações secundárias */
+.next-panel {
+  margin-top: 28px;
+}
+
+/* Cartão de voz */
+.voice-panel {
+  max-width: 1180px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.voice-panel-main {
+  gap: 20px;
+}
+
+/* Botões da voz */
+.voice-panel button {
+  white-space: nowrap;
+}
+
+/* Comando inteligente */
+.command-panel,
+.command-card,
+.command-section .command-panel {
+  max-width: 1180px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+/* Radar */
+.radar-section {
+  max-width: 1180px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+/* Mobile */
+@media (max-width: 900px) {
+
+  .command-section {
+    padding-left: 20px;
+    padding-right: 20px;
+  }
+
+  .voice-panel,
+  .command-panel,
+  .radar-section {
+    width: auto;
+  }
+
+  .command-section [class*="stats"],
+  .command-section [class*="summary"],
+  .command-section [class*="overview"] {
+    grid-template-columns: 1fr 1fr !important;
+  }
+}
+
+@media (max-width: 600px) {
+
+  .command-section [class*="stats"],
+  .command-section [class*="summary"],
+  .command-section [class*="overview"] {
+    grid-template-columns: 1fr !important;
+  }
+
+  .voice-panel button {
+    width: 100%;
+  }
+}
+
+
+
+
+/* ===== IRIS 5.4 — COMPACT UI ===== */
+
+.command-top {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 18px !important;
+  margin-bottom: 18px !important;
+}
+
+.command-top > div {
+  display: flex !important;
+  align-items: center !important;
+  gap: 14px !important;
+}
+
+.command-top p {
+  margin: 2px 0 0 !important;
+  font-size: 13px !important;
+  opacity: .65 !important;
+}
+
+.command-top .ai-badge {
+  display: none !important;
+}
+
+.command-input-wrap {
+  margin-top: 10px !important;
+}
+
+.prompt-row {
+  margin-top: 12px !important;
+  display: flex !important;
+  gap: 8px !important;
+  flex-wrap: wrap !important;
+}
+
+.prompt-row button {
+  padding: 7px 12px !important;
+  font-size: 12px !important;
+}
+
+/* Voz: mantém os controles, mas ocupa muito menos espaço */
+.voice-section {
+  padding: 14px 18px !important;
+  margin-top: 14px !important;
+}
+
+.voice-section .voice-status {
+  margin-top: 6px !important;
+  font-size: 12px !important;
+}
+
+.voice-section .prompt-row {
+  margin-top: 8px !important;
+}
+
+/* Reduz excesso de títulos e espaçamento */
+.section-heading {
+  margin-bottom: 14px !important;
+}
+
+.section-heading h2 {
+  margin: 2px 0 !important;
+}
+
+.section-heading p {
+  margin: 4px 0 0 !important;
+  font-size: 13px !important;
+  opacity: .65 !important;
+}
+
+/* Radar mais direto */
+.radar-section {
+  margin-top: 22px !important;
+}
+
+.radar-stats {
+  margin-top: 12px !important;
+}
+
+/* Mantém os cards, mas evita sensação de painel excessivo */
+.radar-card {
+  padding: 18px !important;
+}
+
+.radar-card .card-actions {
+  margin-top: 10px !important;
+}
+
+/* Mobile */
+@media (max-width: 760px) {
+  .command-top {
+    display: block !important;
+  }
+
+  .command-top > div {
+    margin-bottom: 8px !important;
+  }
+
+  .prompt-row {
+    overflow-x: auto !important;
+    flex-wrap: nowrap !important;
+  }
+
+  .voice-section {
+    padding: 12px !important;
+  }
+}
+
+
+/* ===== IRIS 5.4 — TOPO LIMPO ===== */
+
+/* Remove os quatro indicadores redundantes do Command Center.
+   A lógica continua existindo; apenas não polui a Home. */
+.iris-cards,
+.iris-card {
+  display: none !important;
+}
+
+/* Evita espaço vazio deixado pelo bloco removido */
+.command-center,
+.command-header {
+  gap: 0 !important;
+}
+
+/* Tipografia mais natural */
+.command-top strong {
+  display: block !important;
+  line-height: 1.25 !important;
+}
+
+.command-top p {
+  line-height: 1.45 !important;
+}
+
+/* Comando principal como elemento central */
+.command-section {
+  margin-top: 18px !important;
+}
+
+/* Voz compacta */
+.voice-section {
+  margin-top: 18px !important;
+}
+
+/* Chips de exemplo menores e organizados */
+.prompt-row {
+  display: flex !important;
+  flex-wrap: wrap !important;
+  gap: 8px !important;
+}
+
+.prompt-row button {
+  white-space: nowrap !important;
+}
+
+/* ===== FIM TOPO LIMPO ===== */
+
+/* =========================================================
+   IRIS 5.4 — CORREÇÃO BLOCO SUPERIOR / UI LIMPA
+   ========================================================= */
+
+.iris-card {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: flex-start !important;
+  gap: 6px !important;
+  min-width: 0 !important;
+}
+
+.iris-card-label {
+  display: block !important;
+  width: 100% !important;
+  margin: 0 0 2px 0 !important;
+  font-size: 13px !important;
+  font-weight: 600 !important;
+  letter-spacing: .08em !important;
+  line-height: 1.2 !important;
+  white-space: normal !important;
+}
+
+.iris-card-value {
+  display: block !important;
+  width: 100% !important;
+  margin: 0 !important;
+  font-size: 18px !important;
+  font-weight: 700 !important;
+  line-height: 1.3 !important;
+}
+
+.iris-card p,
+.iris-card-detail {
+  display: block !important;
+  width: 100% !important;
+  margin: 2px 0 0 0 !important;
+  line-height: 1.45 !important;
+}
+
+.command-top {
+  display: flex !important;
+  align-items: center !important;
+  gap: 18px !important;
+  margin-top: 10px !important;
+}
+
+.command-top button {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+  white-space: nowrap !important;
+  border: 0 !important;
+  background: transparent !important;
+  padding: 0 !important;
+}
+
+.command-top button + button {
+  margin-left: 8px !important;
+}
+
+.iris-command-center {
+  margin-bottom: 18px !important;
+}
+
+.iris-command-center > p {
+  max-width: 760px !important;
+  line-height: 1.45 !important;
+}
+
+/* Evita textos colados em elementos inline */
+.iris-card span,
+.iris-card strong {
+  line-height: 1.35 !important;
+}
+
+/* Responsivo */
+@media (max-width: 900px) {
+  .iris-card {
+    width: 100% !important;
+  }
+
+  .command-top {
+    flex-wrap: wrap !important;
+    gap: 12px !important;
+  }
+}
+
+
+/* IRIS 5.4 — esconder faixa informativa superior */
+.iris-card:has(.iris-card-label) {
+  display: none !important;
+}
+
+.command-top {
+  display: none !important;
+}
+
+
+/* =========================================================
+   IRIS HOME — LAYOUT PRINCIPAL 5.3
+   ========================================================= */
+
+.iris-home-hero {
+  min-height: 720px;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 70px 24px 100px;
+  text-align: center;
+  position: relative;
+  box-sizing: border-box;
+}
+
+.iris-home-orbit {
+  width: 150px;
+  height: 150px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 22px;
+}
+
+.iris-home-orbit-ring {
+  width: 108px;
+  height: 108px;
+  border-radius: 50%;
+  position: relative;
+  background:
+    conic-gradient(
+      from 210deg,
+      #4435ff,
+      #6d4cff,
+      #21a9ff,
+      #4435ff
+    );
+  box-shadow:
+    0 0 25px rgba(83, 78, 255, .75),
+    0 0 65px rgba(0, 136, 255, .30);
+  animation: iris-home-pulse 4s ease-in-out infinite;
+}
+
+.iris-home-orbit-ring::before {
+  content: "";
+  position: absolute;
+  inset: 12px;
+  border-radius: 50%;
+  background: #071326;
+}
+
+.iris-home-orbit-core {
+  position: absolute;
+  inset: 25px;
+  border-radius: 50%;
+  background:
+    radial-gradient(
+      circle at 35% 30%,
+      #142b52,
+      #061020 75%
+    );
+  z-index: 2;
+}
+
+.iris-home-hero h1 {
+  margin: 0;
+  color: #f4f7ff;
+  font-size: clamp(52px, 6vw, 78px);
+  line-height: 1;
+  font-weight: 500;
+  letter-spacing: -3px;
+}
+
+.iris-home-hero h1 span {
+  color: #18d9c7;
+}
+
+.iris-home-subtitle {
+  margin: 20px 0 42px;
+  color: #aebed8;
+  font-size: clamp(20px, 2vw, 28px);
+  line-height: 1.4;
+}
+
+.iris-home-command {
+  width: min(1580px, 94vw);
+  min-height: 112px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px 10px 22px;
+  box-sizing: border-box;
+  border: 1px solid rgba(86, 155, 235, .38);
+  border-radius: 60px;
+  background: rgba(8, 23, 43, .76);
+  box-shadow:
+    0 20px 70px rgba(0, 0, 0, .28),
+    inset 0 0 40px rgba(70, 120, 255, .05);
+  backdrop-filter: blur(20px);
+}
+
+.iris-home-input {
+  flex: 1;
+  min-width: 0;
+  height: 72px;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: #edf4ff;
+  font-size: 24px;
+  padding: 0 12px;
+  box-sizing: border-box;
+}
+
+.iris-home-input::placeholder {
+  color: #91a7c7;
+}
+
+.iris-home-mic,
+.iris-home-tool,
+.iris-home-send {
+  flex: 0 0 auto;
+  border: 0;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: .2s ease;
+}
+
+.iris-home-mic {
+  width: 58px;
+  height: 58px;
+  background: transparent;
+  color: #55d0ff;
+  font-size: 30px;
+}
+
+.iris-home-tool {
+  width: 62px;
+  height: 62px;
+  border-radius: 50%;
+  background: transparent;
+  color: #a9c5eb;
+  font-size: 24px;
+}
+
+.iris-home-mic:hover,
+.iris-home-tool:hover {
+  background: rgba(75, 130, 225, .13);
+}
+
+.iris-home-send {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  color: #fff;
+  background: linear-gradient(135deg, #6040ff, #3b8fff);
+  font-size: 40px;
+  box-shadow: 0 10px 35px rgba(72, 75, 255, .40);
+}
+
+.iris-home-send:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 14px 42px rgba(72, 75, 255, .55);
+}
+
+.iris-home-shortcuts {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 14px;
+  margin-top: 28px;
+}
+
+.iris-home-shortcuts button {
+  min-width: 180px;
+  height: 66px;
+  padding: 0 25px;
+  border-radius: 38px;
+  border: 1px solid rgba(72, 137, 230, .34);
+  background: rgba(7, 20, 39, .45);
+  color: #b9c9e2;
+  font-size: 18px;
+  cursor: pointer;
+  transition: .2s ease;
+}
+
+.iris-home-shortcuts button span {
+  margin-right: 9px;
+  color: #4e91ff;
+  font-size: 23px;
+}
+
+.iris-home-shortcuts button:hover {
+  transform: translateY(-2px);
+  border-color: rgba(100, 137, 255, .72);
+  background: rgba(31, 55, 105, .45);
+  color: #f2f6ff;
+}
+
+@keyframes iris-home-pulse {
+  0%, 100% {
+    transform: scale(1);
+    filter: brightness(1);
+  }
+
+  50% {
+    transform: scale(1.06);
+    filter: brightness(1.15);
+  }
+}
+
+@media (max-width: 800px) {
+
+  .iris-home-hero {
+    min-height: 650px;
+    padding: 50px 16px 70px;
+  }
+
+  .iris-home-command {
+    min-height: 82px;
+    padding: 8px 10px 8px 14px;
+    border-radius: 44px;
+  }
+
+  .iris-home-input {
+    height: 58px;
+    font-size: 17px;
+  }
+
+  .iris-home-tool {
+    display: none;
+  }
+
+  .iris-home-send {
+    width: 56px;
+    height: 56px;
+    font-size: 30px;
+  }
+
+  .iris-home-shortcuts {
+    gap: 8px;
+  }
+
+  .iris-home-shortcuts button {
+    min-width: 140px;
+    height: 56px;
+    font-size: 15px;
+    padding: 0 15px;
+  }
+}
+
+
+/* =========================================================
+   IRIS — NOVO HOME / LAYOUT PRINCIPAL 5.3
+   ========================================================= */
+
+.iris-home-hero {
+  min-height: 720px;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 70px 5% 90px;
+  box-sizing: border-box;
+  text-align: center;
+  background:
+    radial-gradient(circle at 50% 25%, rgba(47, 104, 255, .14), transparent 34%),
+    linear-gradient(180deg, #061326 0%, #08172b 48%, #071224 100%);
+}
+
+.iris-home-orbit {
+  width: 130px;
+  height: 130px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 28px;
+}
+
+.iris-home-orbit-ring {
+  width: 96px;
+  height: 96px;
+  border-radius: 50%;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: conic-gradient(
+    from 25deg,
+    #243cff,
+    #27b8ff,
+    #315cff,
+    #243cff
+  );
+  box-shadow:
+    0 0 22px rgba(45, 102, 255, .65),
+    0 0 55px rgba(24, 121, 255, .28);
+  animation: iris-orbit-glow 4s ease-in-out infinite;
+}
+
+.iris-home-orbit-ring::before {
+  content: "";
+  position: absolute;
+  inset: 12px;
+  border-radius: 50%;
+  background: #071326;
+}
+
+.iris-home-orbit-core {
+  position: relative;
+  z-index: 2;
+  width: 54px;
+  height: 54px;
+  border-radius: 50%;
+  background: #071326;
+}
+
+.iris-home-hero h1 {
+  margin: 0;
+  font-size: clamp(46px, 5vw, 72px);
+  line-height: 1.05;
+  font-weight: 400;
+  letter-spacing: -2px;
+  color: #f4f7ff;
+}
+
+.iris-home-hero h1 span {
+  color: #19d5c2;
+}
+
+.iris-home-subtitle {
+  margin: 18px 0 48px;
+  font-size: clamp(20px, 2vw, 29px);
+  line-height: 1.4;
+  color: #a9bde0;
+}
+
+.iris-main-command {
+  width: min(1120px, 94%);
+  min-height: 112px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 18px;
+  box-sizing: border-box;
+  border: 1px solid rgba(105, 158, 255, .28);
+  border-radius: 60px;
+  background: rgba(9, 25, 47, .88);
+  box-shadow:
+    0 20px 70px rgba(0, 0, 0, .30),
+    inset 0 0 30px rgba(49, 96, 180, .08);
+  backdrop-filter: blur(18px);
+}
+
+.iris-main-command input {
+  flex: 1;
+  min-width: 100px;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: #f2f6ff;
+  font-size: 22px;
+  padding: 18px 8px;
+}
+
+.iris-main-command input::placeholder {
+  color: #8ea4c9;
+}
+
+.iris-command-mic,
+.iris-command-tool,
+.iris-command-send {
+  flex: 0 0 auto;
+  border: 0;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: .2s ease;
+}
+
+.iris-command-mic {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  background: transparent;
+  color: #43cfff;
+}
+
+.iris-command-tool {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: rgba(29, 52, 88, .72);
+  color: #9fc2ff;
+  font-size: 20px;
+}
+
+.iris-command-tool:hover {
+  transform: translateY(-2px);
+  background: rgba(55, 91, 150, .8);
+  color: #fff;
+}
+
+.iris-command-send {
+  width: 58px;
+  height: 58px;
+  border-radius: 50%;
+  color: white;
+  background: linear-gradient(135deg, #55aaff, #3155ff);
+  box-shadow: 0 8px 28px rgba(45, 91, 255, .4);
+}
+
+.iris-command-send:hover {
+  transform: scale(1.05);
+}
+
+.iris-function-buttons {
+  width: min(1120px, 94%);
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin-top: 28px;
+}
+
+.iris-function-buttons button {
+  min-height: 58px;
+  padding: 0 27px;
+  border-radius: 32px;
+  border: 1px solid rgba(82, 139, 226, .28);
+  background: rgba(7, 22, 43, .7);
+  color: #a9c2e9;
+  font-size: 17px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: .2s ease;
+}
+
+.iris-function-buttons button:hover {
+  color: #fff;
+  border-color: rgba(72, 137, 255, .7);
+  background: rgba(25, 50, 91, .8);
+  transform: translateY(-2px);
+}
+
+@keyframes iris-orbit-glow {
+  0%, 100% {
+    transform: rotate(0deg) scale(1);
+  }
+  50% {
+    transform: rotate(180deg) scale(1.04);
+  }
+}
+
+@media (max-width: 800px) {
+  .iris-home-hero {
+    min-height: 680px;
+    padding: 55px 18px 70px;
+  }
+
+  .iris-main-command {
+    min-height: 82px;
+    border-radius: 28px;
+    flex-wrap: wrap;
+  }
+
+  .iris-main-command input {
+    order: 1;
+    flex-basis: calc(100% - 70px);
+    font-size: 18px;
+  }
+
+  .iris-command-mic {
+    order: 0;
+  }
+
+  .iris-command-send {
+    order: 2;
+  }
+
+  .iris-command-tool {
+    display: none;
+  }
+
+  .iris-function-buttons {
+    gap: 9px;
+  }
+
+  .iris-function-buttons button {
+    min-height: 48px;
+    padding: 0 17px;
+    font-size: 14px;
+  }
+}
+
+
+/* =========================================================
+   IRIS — COMMAND CENTER 5.3
+   HOME PRINCIPAL — MODO CENTRAL
+   ========================================================= */
+
+body:has(.iris-home-hero) {
+  overflow: hidden !important;
+}
+
+.iris-home-hero {
+  position: fixed !important;
+  inset: 0 !important;
+  z-index: 99999 !important;
+
+  width: 100vw !important;
+  min-height: 100vh !important;
+  height: 100vh !important;
+
+  margin: 0 !important;
+  padding: 70px 5vw 45px !important;
+  box-sizing: border-box !important;
+
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: center !important;
+
+  overflow-y: auto !important;
+
+  background:
+    radial-gradient(
+      circle at 50% 35%,
+      rgba(21, 91, 180, .20) 0%,
+      rgba(7, 28, 61, .10) 28%,
+      rgba(3, 14, 31, .96) 68%
+    ),
+    linear-gradient(
+      180deg,
+      #061326 0%,
+      #07172b 48%,
+      #020b19 100%
+    ) !important;
+
+  color: #f4f8ff !important;
+}
+
+/* Remove visual interference from the old interface */
+.iris-home-hero::before {
+  content: "" !important;
+  position: absolute !important;
+  inset: 0 !important;
+  pointer-events: none !important;
+  background:
+    radial-gradient(
+      circle at 50% 28%,
+      rgba(0, 119, 255, .13),
+      transparent 34%
+    ) !important;
+}
+
+/* =========================================================
+   ORBIT
+   ========================================================= */
+
+.iris-home-orbit {
+  position: relative !important;
+  z-index: 2 !important;
+
+  width: 128px !important;
+  height: 128px !important;
+
+  margin: 0 0 24px !important;
+
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+.iris-home-orbit-ring {
+  position: relative !important;
+
+  width: 108px !important;
+  height: 108px !important;
+
+  border-radius: 50% !important;
+
+  background:
+    conic-gradient(
+      from 210deg,
+      #2747ff 0deg,
+      #315eff 75deg,
+      #129dff 150deg,
+      #1dc9ff 205deg,
+      #315eff 285deg,
+      #2747ff 360deg
+    ) !important;
+
+  box-shadow:
+    0 0 16px rgba(38, 92, 255, .85),
+    0 0 35px rgba(25, 122, 255, .42),
+    0 0 70px rgba(0, 101, 255, .20) !important;
+
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+
+  animation: iris-orbit-pulse 4s ease-in-out infinite !important;
+}
+
+.iris-home-orbit-ring::after {
+  content: "" !important;
+
+  position: absolute !important;
+  inset: 9px !important;
+
+  border-radius: 50% !important;
+
+  background: #061326 !important;
+
+  box-shadow:
+    inset 0 0 18px rgba(0,0,0,.55) !important;
+}
+
+.iris-home-orbit-core {
+  position: absolute !important;
+  z-index: 3 !important;
+
+  width: 12px !important;
+  height: 12px !important;
+
+  border-radius: 50% !important;
+
+  background: #1aaeff !important;
+
+  box-shadow:
+    0 0 10px #159cff,
+    0 0 24px rgba(21,156,255,.8) !important;
+}
+
+@keyframes iris-orbit-pulse {
+  0%,100% {
+    transform: scale(1);
+  }
+
+  50% {
+    transform: scale(1.035);
+  }
+}
+
+/* =========================================================
+   TITULO
+   ========================================================= */
+
+.iris-home-hero h1 {
+  position: relative !important;
+  z-index: 2 !important;
+
+  margin: 0 !important;
+
+  font-size: clamp(46px, 5vw, 68px) !important;
+  line-height: 1.05 !important;
+  font-weight: 400 !important;
+  letter-spacing: -2.5px !important;
+  text-align: center !important;
+
+  color: #f5f8ff !important;
+}
+
+.iris-home-hero h1 span {
+  color: #19d8c5 !important;
+}
+
+.iris-home-subtitle {
+  position: relative !important;
+  z-index: 2 !important;
+
+  margin: 18px 0 42px !important;
+
+  font-size: clamp(21px, 2vw, 30px) !important;
+  line-height: 1.3 !important;
+  font-weight: 400 !important;
+
+  text-align: center !important;
+
+  color: #9fb6db !important;
+}
+
+/* =========================================================
+   COMANDO CENTRAL
+   ========================================================= */
+
+.iris-main-command {
+  position: relative !important;
+  z-index: 2 !important;
+
+  width: min(1050px, 94vw) !important;
+  min-height: 92px !important;
+
+  box-sizing: border-box !important;
+
+  display: flex !important;
+  align-items: center !important;
+
+  padding: 12px 12px 12px 26px !important;
+
+  border: 1px solid rgba(65, 133, 207, .38) !important;
+  border-radius: 55px !important;
+
+  background:
+    linear-gradient(
+      180deg,
+      rgba(7, 26, 52, .92),
+      rgba(5, 20, 40, .95)
+    ) !important;
+
+  box-shadow:
+    0 0 0 1px rgba(255,255,255,.025),
+    0 18px 55px rgba(0,0,0,.30),
+    inset 0 1px 0 rgba(255,255,255,.035) !important;
+}
+
+.iris-command-mic {
+  flex: 0 0 auto !important;
+
+  width: 48px !important;
+  height: 48px !important;
+
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+
+  border: 0 !important;
+  background: transparent !important;
+
+  color: #20cfff !important;
+}
+
+#iris-comando-entrada {
+  flex: 1 1 auto !important;
+
+  min-width: 0 !important;
+  height: 62px !important;
+
+  border: 0 !important;
+  outline: 0 !important;
+
+  background: transparent !important;
+
+  color: #eaf3ff !important;
+
+  font-size: clamp(19px, 2vw, 27px) !important;
+  font-weight: 400 !important;
+}
+
+#iris-comando-entrada::placeholder {
+  color: #91a9d0 !important;
+  opacity: 1 !important;
+}
+
+/* Ferramentas dentro da barra */
+
+.iris-main-command .iris-command-tool,
+.iris-main-command > button:not(.iris-command-mic) {
+  flex: 0 0 auto !important;
+
+  width: 52px !important;
+  height: 52px !important;
+
+  margin-left: 7px !important;
+
+  border: 0 !important;
+  border-radius: 50% !important;
+
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+
+  background: rgba(37, 75, 125, .48) !important;
+
+  color: #a9c6ef !important;
+
+  transition:
+    transform .18s ease,
+    background .18s ease,
+    box-shadow .18s ease !important;
+}
+
+.iris-main-command .iris-command-tool:hover,
+.iris-main-command > button:not(.iris-command-mic):hover {
+  transform: translateY(-1px) !important;
+
+  background: rgba(52, 103, 174, .65) !important;
+
+  box-shadow:
+    0 0 18px rgba(40, 121, 255, .20) !important;
+}
+
+/* Botão enviar */
+
+.iris-main-command .send-button {
+  width: 62px !important;
+  height: 62px !important;
+
+  margin-left: 10px !important;
+
+  border: 0 !important;
+  border-radius: 50% !important;
+
+  background:
+    linear-gradient(
+      135deg,
+      #4f46ff,
+      #267cff
+    ) !important;
+
+  color: white !important;
+
+  box-shadow:
+    0 8px 25px rgba(45, 82, 255, .40) !important;
+}
+
+/* =========================================================
+   BOTÕES DE FUNCIONALIDADE
+   ========================================================= */
+
+.iris-home-hero .prompt-row {
+  position: relative !important;
+  z-index: 2 !important;
+
+  width: min(1050px, 94vw) !important;
+
+  margin-top: 28px !important;
+
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  flex-wrap: wrap !important;
+  gap: 14px !important;
+}
+
+.iris-home-hero .prompt-row button {
+  min-width: 155px !important;
+  height: 56px !important;
+
+  padding: 0 25px !important;
+
+  border: 1px solid rgba(54, 111, 184, .42) !important;
+  border-radius: 30px !important;
+
+  background: rgba(4, 20, 40, .58) !important;
+
+  color: #b7cef0 !important;
+
+  font-size: 17px !important;
+  font-weight: 500 !important;
+
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.025) !important;
+
+  transition:
+    .18s ease !important;
+}
+
+.iris-home-hero .prompt-row button:hover {
+  color: #ffffff !important;
+
+  border-color: rgba(54, 128, 255, .72) !important;
+
+  background: rgba(17, 45, 79, .82) !important;
+
+  transform: translateY(-2px) !important;
+
+  box-shadow:
+    0 8px 25px rgba(0,80,180,.18) !important;
+}
+
+/* =========================================================
+   RESPONSIVO
+   ========================================================= */
+
+@media (max-width: 800px) {
+
+  .iris-home-hero {
+    padding:
+      45px 18px 35px !important;
+  }
+
+  .iris-home-orbit {
+    transform: scale(.82) !important;
+    margin-bottom: 5px !important;
+  }
+
+  .iris-home-subtitle {
+    margin-bottom: 28px !important;
+  }
+
+  .iris-main-command {
+    min-height: 76px !important;
+    padding-left: 12px !important;
+  }
+
+  #iris-comando-entrada {
+    height: 50px !important;
+    font-size: 17px !important;
+  }
+
+  .iris-main-command .iris-command-tool,
+  .iris-main-command > button:not(.iris-command-mic) {
+    display: none !important;
+  }
+
+  .iris-main-command .send-button {
+    display: flex !important;
+    width: 52px !important;
+    height: 52px !important;
+  }
+
+  .iris-home-hero .prompt-row {
+    gap: 9px !important;
+  }
+
+  .iris-home-hero .prompt-row button {
+    min-width: 135px !important;
+    height: 48px !important;
+    font-size: 15px !important;
+  }
+}
+
+
+/* =========================================================
+   IRIS 5.3 — BLOCO 2 — ACABAMENTO HOME
+   ========================================================= */
+
+.iris-home-hero button:focus,
+.iris-home-hero button:focus-visible,
+.iris-main-command button:focus,
+.iris-main-command button:focus-visible,
+.iris-home-tools button:focus,
+.iris-home-tools button:focus-visible {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+.iris-home-tools {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 14px !important;
+  flex-wrap: wrap !important;
+}
+
+.iris-home-tools button {
+  min-width: 170px;
+  height: 72px;
+  border-radius: 38px !important;
+  background: rgba(4, 20, 43, 0.62) !important;
+  border: 1px solid rgba(63, 143, 255, 0.22) !important;
+  color: #a9c5ee !important;
+  transition: all .2s ease !important;
+}
+
+.iris-home-tools button:hover {
+  border-color: rgba(63, 143, 255, 0.65) !important;
+  background: rgba(8, 31, 62, 0.9) !important;
+  transform: translateY(-2px);
+}
+
+.iris-home-tools button:active {
+  transform: translateY(0);
+}
+
+.iris-home-tools button[aria-selected="true"],
+.iris-home-tools button.active {
+  border-color: rgba(63, 143, 255, 0.45) !important;
+  box-shadow: 0 0 22px rgba(36, 105, 255, .14) !important;
+}
+
+.iris-main-command {
+  width: min(1480px, calc(100% - 48px)) !important;
+  margin-left: auto !important;
+  margin-right: auto !important;
+}
+
+#iris-command-input {
+  height: 100% !important;
+  background: transparent !important;
+  border: 0 !important;
+  outline: 0 !important;
+  box-shadow: none !important;
+}
+
+#iris-command-input:focus {
+  outline: 0 !important;
+  box-shadow: none !important;
+}
+
+.iris-main-command input::placeholder {
+  color: rgba(168, 195, 234, .78) !important;
+}
+
+@media (max-width: 900px) {
+  .iris-home-tools {
+    gap: 10px !important;
+  }
+
+  .iris-home-tools button {
+    min-width: 145px;
+    height: 60px;
+  }
+}
+
+@media (max-width: 600px) {
+  .iris-home-tools button {
+    min-width: calc(50% - 8px);
+    height: 56px;
+  }
+}
+
+
+/* ============================================================
+   IRIS 5.3 — COMMAND CENTER / INTERFACE PRINCIPAL
+   Visual aprovado
+   ============================================================ */
+
+:root {
+  --iris-bg: #020b1b;
+  --iris-bg-2: #06162d;
+  --iris-line: rgba(58, 143, 255, .24);
+  --iris-blue: #168cff;
+  --iris-cyan: #16d8ff;
+  --iris-text: #f4f7ff;
+  --iris-muted: #9db4d8;
+}
+
+/* Fundo principal */
+body {
+  background:
+    radial-gradient(
+      circle at 50% 28%,
+      rgba(22, 105, 255, .12),
+      transparent 34%
+    ),
+    linear-gradient(
+      180deg,
+      #061326 0%,
+      #020b1b 48%,
+      #020918 100%
+    ) !important;
+}
+
+/* Container principal */
+.iris-home,
+.iris-home-page,
+main {
+  background: transparent !important;
+}
+
+/* ============================================================
+   HERO
+   ============================================================ */
+
+.iris-home-hero {
+  min-height: 100vh !important;
+  width: 100% !important;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: flex-start !important;
+  padding:
+    clamp(80px, 13vh, 150px)
+    5vw
+    80px !important;
+  box-sizing: border-box !important;
+  background:
+    radial-gradient(
+      circle at 50% 25%,
+      rgba(26, 99, 255, .10),
+      transparent 34%
+    ) !important;
+}
+
+/* Logo / símbolo */
+.iris-home-orbit,
+.iris-home-orbit-ring {
+  width: 118px !important;
+  height: 118px !important;
+  margin: 0 auto 34px !important;
+}
+
+.iris-home-orbit-ring {
+  border-radius: 50% !important;
+  border: 8px solid transparent !important;
+  background:
+    linear-gradient(#061326, #061326) padding-box,
+    linear-gradient(
+      135deg,
+      #3038ff 0%,
+      #236cff 42%,
+      #15d9ff 100%
+    ) border-box !important;
+  box-shadow:
+    0 0 18px rgba(39, 91, 255, .75),
+    0 0 55px rgba(0, 174, 255, .30),
+    inset 0 0 22px rgba(0, 153, 255, .18) !important;
+}
+
+/* Cabeçalho */
+.iris-home-hero h1 {
+  margin: 0 !important;
+  color: #f6f8ff !important;
+  font-size: clamp(48px, 5vw, 76px) !important;
+  line-height: 1.04 !important;
+  font-weight: 400 !important;
+  letter-spacing: -3px !important;
+  text-align: center !important;
+}
+
+.iris-home-subtitle,
+.iris-home-hero p {
+  color: #a7bddf !important;
+  font-size: clamp(20px, 2vw, 29px) !important;
+  text-align: center !important;
+  margin-top: 18px !important;
+}
+
+/* ============================================================
+   COMANDO CENTRAL
+   ============================================================ */
+
+.iris-main-command,
+.iris-home-main,
+.command-card,
+.cartão-de-comando {
+  width: min(1480px, 92vw) !important;
+  max-width: 1480px !important;
+  margin-left: auto !important;
+  margin-right: auto !important;
+}
+
+/* Caixa do comando */
+.command-card,
+.cartão-de-comando {
+  background:
+    linear-gradient(
+      180deg,
+      rgba(7, 27, 52, .90),
+      rgba(3, 17, 35, .94)
+    ) !important;
+
+  border: 1px solid rgba(66, 151, 255, .30) !important;
+  border-radius: 58px !important;
+
+  box-shadow:
+    0 20px 70px rgba(0, 0, 0, .28),
+    inset 0 1px 0 rgba(255,255,255,.035) !important;
+
+  min-height: 112px !important;
+  padding: 10px 12px 10px 30px !important;
+
+  display: flex !important;
+  align-items: center !important;
+}
+
+/* Campo de comando */
+#iris-comando-input,
+.iris-command-input,
+.command-input {
+  color: #dce9ff !important;
+  font-size: 22px !important;
+  background: transparent !important;
+}
+
+#iris-comando-input::placeholder {
+  color: #91a9cf !important;
+  opacity: 1 !important;
+}
+
+/* Microfone */
+.iris-command-mic,
+.command-mic,
+button[aria-label="Ativar voz"] {
+  color: #13d8ff !important;
+}
+
+/* Botões circulares do comando */
+.command-card button,
+.cartão-de-comando button {
+  transition:
+    transform .18s ease,
+    background .18s ease,
+    box-shadow .18s ease !important;
+}
+
+.command-card button:hover,
+.cartão-de-comando button:hover {
+  transform: translateY(-2px) !important;
+  box-shadow: 0 0 24px rgba(28, 119, 255, .25) !important;
+}
+
+/* ============================================================
+   ATALHOS
+   ============================================================ */
+
+.command-card .prompt-row,
+.cartão-de-comando .prompt-row {
+  margin-top: 26px !important;
+}
+
+.prompt-row button {
+  background:
+    rgba(3, 18, 38, .75) !important;
+
+  border: 1px solid rgba(66, 151, 255, .24) !important;
+
+  color: #b9cdf0 !important;
+
+  border-radius: 40px !important;
+
+  min-height: 58px !important;
+  padding: 0 28px !important;
+
+  font-size: 17px !important;
+
+  box-shadow:
+    inset 0 0 0 1px rgba(255,255,255,.015) !important;
+}
+
+.prompt-row button:hover {
+  color: #ffffff !important;
+  border-color: rgba(54, 139, 255, .62) !important;
+  background: rgba(9, 34, 69, .92) !important;
+}
+
+/* ============================================================
+   OCULTAR O RADAR DA HOME PRINCIPAL
+   O Radar continuará existindo e poderá ser aberto pelo botão
+   Tarefas.
+   ============================================================ */
+
+section.radar-section {
+  display: block !important;
+}
+
+/* ============================================================
+   OCULTAR BLOCOS ANTIGOS DA HOME
+   ============================================================ */
+
+.iris-home .voice-card,
+.iris-home .voice-section,
+.iris-home .voice-status,
+.iris-home .section-heading {
+  display: none !important;
+}
+
+/* ============================================================
+   LIMPEZA VISUAL
+   ============================================================ */
+
+.iris-home *,
+.iris-home-page * {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(52,125,255,.45) transparent;
+}
+
+/* ============================================================
+   RESPONSIVO
+   ============================================================ */
+
+@media (max-width: 900px) {
+
+  .iris-home-hero {
+    padding:
+      70px 18px 50px !important;
+  }
+
+  .iris-home-hero h1 {
+    font-size: 46px !important;
+    letter-spacing: -2px !important;
+  }
+
+  .iris-home-subtitle,
+  .iris-home-hero p {
+    font-size: 19px !important;
+  }
+
+  .command-card,
+  .cartão-de-comando {
+    width: 94vw !important;
+    border-radius: 34px !important;
+    min-height: 92px !important;
+    padding: 8px 10px 8px 20px !important;
+  }
+
+  #iris-comando-input {
+    font-size: 17px !important;
+  }
+
+  .prompt-row {
+    display: flex !important;
+    flex-wrap: wrap !important;
+    justify-content: center !important;
+    gap: 10px !important;
+  }
+
+  .prompt-row button {
+    min-height: 50px !important;
+    padding: 0 18px !important;
+    font-size: 15px !important;
+  }
+}
+
+
+
+/* IRIS 5.3 — CORREÇÃO DA INTERFACE PRINCIPAL */
+
+/*
+ * O Command Center deve abrir limpo.
+ * O onboarding não deve aparecer automaticamente sobre a interface.
+ */
+.dialog-backdrop.onboarding-backdrop {
+  display: none !important;
+}
+
+.onboarding-backdrop {
+  display: none !important;
+}
+
+/*
+ * Evita que o conteúdo principal fique desfocado
+ * por causa de algum backdrop residual.
+ */
+body:has(.onboarding-backdrop) {
+  overflow: auto;
+}
+
+/*
+ * Command Center ocupa a área disponível.
+ */
+#root {
+  min-height: 100vh;
+}
+
+/*
+ * Campo principal de comando permanece acima do conteúdo,
+ * mas não acima de diálogos.
+ */
+.iris-command-bar {
+  z-index: 20;
+}
+
+/*
+ * Botões da interface principal.
+ */
+.iris-command-actions {
+  position: relative;
+  z-index: 21;
+}
+
+/*
+ * Mantém a identidade visual da IRIS.
+ */
+.iris-command-center,
+.iris-home,
+.iris-main,
+.iris-shell {
+  background:
+    radial-gradient(
+      circle at 50% 18%,
+      rgba(34, 92, 190, 0.12),
+      transparent 38%
+    ),
+    linear-gradient(
+      180deg,
+      #061326 0%,
+      #07172b 48%,
+      #020b19 100%
+    );
+}
+
+
+/* IRIS 5.3 — LAYER FINAL */
+
+/*
+ * A interface do Command Center substitui a Home
+ * visualmente enquanto estiver aberta.
+ */
+body {
+  min-height: 100vh;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+/* ============================================================
+   IRIS 5.3 — FINAL LAYOUT FIX
+   Corrige sobreposição do Command Center com o Radar.
+   Não altera lógica, eventos ou funcionalidades.
+   ============================================================ */
+
+/* Container principal da Home */
+main,
+.principal,
+.home-page,
+.home-container {
+  position: relative !important;
+  overflow-x: hidden !important;
+}
+
+/* Cabeçalho permanece no fluxo */
+.command-top {
+  position: relative !important;
+  top: auto !important;
+  bottom: auto !important;
+  left: auto !important;
+  right: auto !important;
+  transform: none !important;
+  z-index: 10 !important;
+}
+
+/* Área de apresentação */
+.hero,
+.hero-section,
+.hero-content {
+  position: relative !important;
+  transform: none !important;
+}
+
+/* Painel de voz */
+.voz-painel-main,
+.voz-comando-painel,
+.voz-painel,
+.voice-panel {
+  position: relative !important;
+  top: auto !important;
+  bottom: auto !important;
+  transform: none !important;
+  z-index: 5 !important;
+  margin-bottom: 28px !important;
+}
+
+/* Campo principal de comando */
+.prompt-row,
+.iris-command-bar,
+.iris-command,
+.command-bar {
+  position: relative !important;
+  top: auto !important;
+  bottom: auto !important;
+  left: auto !important;
+  right: auto !important;
+  transform: none !important;
+  z-index: 20 !important;
+  width: 100% !important;
+  max-width: 1400px !important;
+  margin: 28px auto 34px auto !important;
+  box-sizing: border-box !important;
+}
+
+/* Evita que o campo seja retirado do fluxo */
+.prompt-row {
+  overflow: visible !important;
+}
+
+/* Área de conteúdo do comando */
+.command-top > div,
+.command-top .command-inner,
+.iris-command-anchor-inner {
+  position: relative !important;
+  transform: none !important;
+}
+
+/* Radar deve começar DEPOIS do comando */
+.seção-radar,
+.secao-radar,
+.seção-radar *,
+.secao-radar * {
+  box-sizing: border-box;
+}
+
+.seção-radar,
+.secao-radar,
+section#radar,
+.radar-section {
+  position: relative !important;
+  clear: both !important;
+  transform: none !important;
+  z-index: 2 !important;
+  margin-top: 20px !important;
+  padding-top: 0 !important;
+}
+
+/* Título do Radar */
+.radar-card-top,
+.radar-toolbar,
+.radar-search,
+.radar-grade,
+.radar-stats {
+  position: relative !important;
+  transform: none !important;
+}
+
+/* Estatísticas */
+.radar-stats {
+  display: grid !important;
+  position: relative !important;
+  z-index: 2 !important;
+}
+
+/* Botões do Radar */
+.radar-toolbar,
+.radar-grade {
+  margin-top: 18px !important;
+}
+
+/* As âncoras Agenda/Arquivos/Análises/Ferramentas
+   continuam existindo para navegação, mas não ocupam
+   espaço visual nem criam camadas sobre a Home. */
+section#agenda,
+section#arquivos,
+section#analises,
+section#ferramentas {
+  position: relative !important;
+  height: 1px !important;
+  min-height: 1px !important;
+  max-height: 1px !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+  transform: none !important;
+  z-index: 0 !important;
+}
+
+/* O conteúdo interno dessas âncoras não deve criar
+   elementos visuais sobre o Radar. */
+section#agenda .iris-command-anchor-inner,
+section#arquivos .iris-command-anchor-inner,
+section#analises .iris-command-anchor-inner,
+section#ferramentas .iris-command-anchor-inner {
+  position: relative !important;
+  width: 1px !important;
+  height: 1px !important;
+  min-height: 1px !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  overflow: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
+/* Remove deslocamentos artificiais antigos */
+.iris-command-anchor {
+  transform: none !important;
+}
+
+/* Desktop */
+@media (min-width: 761px) {
+  .command-top {
+    display: block !important;
+  }
+
+  .prompt-row {
+    position: relative !important;
+    margin-top: 28px !important;
+    margin-bottom: 36px !important;
+  }
+
+  .radar-section,
+  section#radar {
+    margin-top: 0 !important;
+  }
+}
+
+/* Mobile */
+@media (max-width: 760px) {
+  .command-top {
+    position: relative !important;
+  }
+
+  .prompt-row {
+    position: relative !important;
+    width: calc(100% - 24px) !important;
+    margin: 20px auto 28px auto !important;
+  }
+
+  .radar-section,
+  section#radar {
+    position: relative !important;
+    margin-top: 0 !important;
+  }
+}
+
+/* Segurança contra elementos antigos atravessando a tela */
+[class*="command"],
+[class*="prompt"],
+[class*="radar"] {
+  box-sizing: border-box;
+}
+
+
+/* ============================================================
+   IRIS 5.3 — CORREÇÃO DEFINITIVA DO FLUXO DO COMMAND CENTER
+   O campo de comando pertence ao fluxo da página.
+   Não deve sobrepor o Radar ou qualquer outra seção.
+   ============================================================ */
+
+.prompt-row,
+.command-top,
+.iris-command,
+.iris-command-bar,
+.command-bar,
+.command-input,
+.iris-command-anchor {
+  position: relative !important;
+  top: auto !important;
+  right: auto !important;
+  bottom: auto !important;
+  left: auto !important;
+  transform: none !important;
+}
+
+.prompt-row {
+  display: flex !important;
+  width: 100% !important;
+  max-width: 1400px !important;
+  margin: 24px auto 32px !important;
+  z-index: 5 !important;
+}
+
+.command-top {
+  width: 100% !important;
+  margin: 0 auto !important;
+  z-index: 5 !important;
+}
+
+.iris-command-anchor {
+  display: block !important;
+  width: 100% !important;
+  height: auto !important;
+  min-height: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  z-index: auto !important;
+}
+
+.iris-command-anchor-inner {
+  position: relative !important;
+  width: 100% !important;
+  height: auto !important;
+  min-height: 0 !important;
+  transform: none !important;
+}
+
+#radar {
+  position: relative !important;
+  transform: none !important;
+  top: auto !important;
+  bottom: auto !important;
+  margin-top: 0 !important;
+  z-index: 1 !important;
+}
+
+.radar-toolbar,
+.radar-grade,
+.radar-stats,
+.radar-grid {
+  position: relative !important;
+  transform: none !important;
+  top: auto !important;
+  bottom: auto !important;
+  z-index: 1 !important;
+}
+
+/* Nunca permitir que o comando cubra o Radar */
+@media (min-width: 761px) {
+  .prompt-row {
+    position: relative !important;
+    inset: auto !important;
+    margin-top: 24px !important;
+    margin-bottom: 36px !important;
+  }
+}
+
+/* Mobile */
+@media (max-width: 760px) {
+  .prompt-row {
+    position: relative !important;
+    inset: auto !important;
+    width: calc(100% - 24px) !important;
+    margin: 18px auto 28px !important;
+  }
+
+  .command-top {
+    position: relative !important;
+    inset: auto !important;
+  }
+}
+
+
+/* =========================================================
+   IRIS 5.3 — CORREÇÃO DEFINITIVA DO COMMAND CENTER
+   O campo de comando NÃO deve flutuar sobre o Radar.
+   ========================================================= */
+
+.iris-command-anchor {
+  position: relative !important;
+  z-index: 1 !important;
+  transform: none !important;
+}
+
+.iris-command-anchor-inner {
+  position: relative !important;
+  z-index: 1 !important;
+  transform: none !important;
+}
+
+.command-top {
+  position: relative !important;
+  z-index: 5 !important;
+  transform: none !important;
+}
+
+.command-top > div {
+  position: relative !important;
+  transform: none !important;
+}
+
+.prompt-row {
+  position: relative !important;
+  z-index: 6 !important;
+  transform: none !important;
+  overflow-x: auto !important;
+}
+
+.prompt-row,
+.prompt-row > *,
+.command-top,
+.command-top > *,
+.iris-command-anchor-inner {
+  inset: auto !important;
+}
+
+.radar,
+.radar-grade,
+.radar-toolbar,
+.radar-stats {
+  position: relative !important;
+  z-index: 1 !important;
+  transform: none !important;
+}
+
+
+/* ===== IRIS 5.3 — CORREÇÃO DEFINITIVA DO PROMPT ===== */
+
+html body #root .prompt-row {
+  position: relative !important;
+  inset: auto !important;
+  top: auto !important;
+  right: auto !important;
+  bottom: auto !important;
+  left: auto !important;
+
+  width: min(100%, 1440px) !important;
+  max-width: 1440px !important;
+  margin: 24px auto 32px !important;
+
+  transform: none !important;
+  z-index: 5 !important;
+}
+
+html body #root .command-top {
+  position: relative !important;
+  width: min(100%, 1440px) !important;
+  max-width: 1440px !important;
+  margin: 16px auto 0 !important;
+  transform: none !important;
+}
+
+html body #root .radar-toolbar {
+  position: relative !important;
+  transform: none !important;
+  z-index: 2 !important;
+}
+
+html body #root .radar-card {
+  position: relative !important;
+  transform: none !important;
+  z-index: 1 !important;
+}
+
+@media (max-width: 760px) {
+  html body #root .prompt-row {
+    width: calc(100% - 24px) !important;
+    margin: 16px 12px 24px !important;
+  }
+
+  html body #root .command-top {
+    width: calc(100% - 24px) !important;
+    margin: 12px !important;
+  }
+}
+
+/* ===== FIM DA CORREÇÃO ===== */
+
+/* =========================================================
+   IRIS 5.3 — LAYOUT MASTER FIX
+   Correção estrutural do Command Center
+   ========================================================= */
+
+/* 1. A página inteira volta ao fluxo normal */
+html,
+body,
+#root {
+  width: 100% !important;
+  min-height: 100% !important;
+  height: auto !important;
+  overflow-x: hidden !important;
+}
+
+html body #root {
+  position: relative !important;
+}
+
+/* 2. Container principal nunca deve criar uma camada fixa */
+html body #root .vida-shell,
+html body #root .command-center,
+html body #root .command-top,
+html body #root .command-section {
+  position: relative !important;
+  inset: auto !important;
+  top: auto !important;
+  right: auto !important;
+  bottom: auto !important;
+  left: auto !important;
+  transform: none !important;
+}
+
+/* 3. O bloco de comando pertence ao fluxo da página */
+html body #root .prompt-row {
+  position: relative !important;
+  inset: auto !important;
+  top: auto !important;
+  right: auto !important;
+  bottom: auto !important;
+  left: auto !important;
+
+  display: flex !important;
+  width: min(100% - 48px, 1440px) !important;
+  max-width: 1440px !important;
+
+  margin: 28px auto 34px !important;
+
+  transform: none !important;
+  z-index: 20 !important;
+  box-sizing: border-box !important;
+}
+
+/* 4. Input interno também não pode ser fixo */
+html body #root .prompt-row > *,
+html body #root .prompt-row input,
+html body #root .prompt-row textarea,
+html body #root #iris-command-input {
+  position: relative !important;
+  inset: auto !important;
+  transform: none !important;
+}
+
+/* 5. Radar obrigatoriamente começa depois do comando */
+html body #root #radar,
+html body #root .radar-section,
+html body #root .radar-toolbar,
+html body #root .radar-grid {
+  position: relative !important;
+  inset: auto !important;
+  transform: none !important;
+}
+
+html body #root #radar {
+  clear: both !important;
+  margin-top: 0 !important;
+  padding-top: 0 !important;
+  z-index: 1 !important;
+}
+
+html body #root .radar-toolbar {
+  z-index: 2 !important;
+  margin-top: 0 !important;
+}
+
+html body #root .radar-grid {
+  z-index: 1 !important;
+  margin-top: 18px !important;
+}
+
+/* 6. Remove qualquer tentativa antiga de sobreposição */
+html body #root .prompt-row,
+html body #root .command-top,
+html body #root .command-section,
+html body #root .radar-section,
+html body #root .radar-toolbar,
+html body #root .radar-grid,
+html body #root .radar-card {
+  animation: none !important;
+}
+
+/* 7. Nada do Command Center pode ficar preso à janela */
+html body #root .prompt-row {
+  position: relative !important;
+  float: none !important;
+}
+
+/* 8. Desktop */
+@media (min-width: 761px) {
+  html body #root .prompt-row {
+    min-height: 104px !important;
+  }
+
+  html body #root #radar {
+    margin-top: 8px !important;
+  }
+}
+
+/* 9. Tablet/mobile */
+@media (max-width: 760px) {
+  html body #root .prompt-row {
+    width: calc(100% - 24px) !important;
+    margin: 20px 12px 28px !important;
+    min-height: 88px !important;
+  }
+
+  html body #root #radar {
+    margin-top: 0 !important;
+  }
+
+  html body #root .radar-toolbar {
+    position: relative !important;
+    flex-wrap: wrap !important;
+  }
+
+  html body #root .radar-grid {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+/* 10. Proteção contra estilos antigos de command-center-fix */
+html body #root [class*="command-center"],
+html body #root [class*="prompt-row"] {
+  box-sizing: border-box !important;
+}
+
+/* =========================================================
+   FIM DO LAYOUT MASTER FIX
+   ========================================================= */
+
+/* ============================================================
+   IRIS COMMAND CENTER 5.3
+   LAYOUT DEFINITIVO — SEM SOBREPOSIÇÃO
+   ============================================================ */
+
+html,
+body,
+#root {
+  margin: 0 !important;
+  padding: 0 !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  min-height: 100% !important;
+  height: auto !important;
+  overflow-x: hidden !important;
+}
+
+#root {
+  position: relative !important;
+}
+
+/* CONTÊINER PRINCIPAL */
+#root .vida-shell {
+  position: relative !important;
+  display: block !important;
+  width: 100% !important;
+  min-height: 100vh !important;
+  height: auto !important;
+  overflow: visible !important;
+}
+
+/* CABEÇALHO */
+#root .command-top {
+  position: relative !important;
+  display: block !important;
+  width: 100% !important;
+  height: auto !important;
+  min-height: 72px !important;
+  inset: auto !important;
+  transform: none !important;
+}
+
+/* ÁREA PRINCIPAL */
+#root .command-section {
+  position: relative !important;
+  display: block !important;
+  width: min(100% - 48px, 1440px) !important;
+  margin: 0 auto !important;
+  padding: 48px 0 0 !important;
+  inset: auto !important;
+  transform: none !important;
+  overflow: visible !important;
+}
+
+/* HERO */
+#root .command-section .hero,
+#root .command-section .hero-section {
+  position: relative !important;
+  inset: auto !important;
+  transform: none !important;
+}
+
+/* CARTÃO DE VOZ */
+#root .voice-card,
+#root .voice-section {
+  position: relative !important;
+  inset: auto !important;
+  transform: none !important;
+  width: 100% !important;
+  box-sizing: border-box !important;
+}
+
+/* ============================================================
+   COMANDO PRINCIPAL
+   ============================================================ */
+
+#root .prompt-row {
+  position: relative !important;
+  display: flex !important;
+  align-items: center !important;
+
+  width: 100% !important;
+  max-width: none !important;
+  min-height: 104px !important;
+
+  margin: 32px 0 40px !important;
+  padding: 12px !important;
+
+  box-sizing: border-box !important;
+
+  inset: auto !important;
+  top: auto !important;
+  right: auto !important;
+  bottom: auto !important;
+  left: auto !important;
+
+  float: none !important;
+  clear: both !important;
+
+  transform: none !important;
+
+  z-index: 20 !important;
+}
+
+/* Nada dentro do comando pode sair do fluxo */
+#root .prompt-row > * {
+  position: relative !important;
+  inset: auto !important;
+  transform: none !important;
+}
+
+/* ============================================================
+   RADAR
+   ============================================================ */
+
+#root #radar,
+#root .radar-section {
+  position: relative !important;
+  display: block !important;
+
+  width: 100% !important;
+  max-width: none !important;
+
+  margin: 0 !important;
+  padding: 0 0 80px !important;
+
+  inset: auto !important;
+  transform: none !important;
+
+  clear: both !important;
+  overflow: visible !important;
+
+  z-index: 1 !important;
+}
+
+/* TÍTULO DO RADAR */
+#root #radar h2,
+#root .radar-section h2 {
+  position: relative !important;
+  margin-top: 0 !important;
+}
+
+/* BARRA DO RADAR */
+#root .radar-toolbar {
+  position: relative !important;
+  display: flex !important;
+  align-items: center !important;
+  flex-wrap: wrap !important;
+
+  width: 100% !important;
+
+  margin: 20px 0 18px !important;
+  padding: 0 !important;
+
+  inset: auto !important;
+  transform: none !important;
+
+  z-index: 2 !important;
+}
+
+/* BOTÕES DO RADAR */
+#root .radar-toolbar button,
+#root .radar-toolbar a {
+  position: relative !important;
+  transform: none !important;
+}
+
+/* GRID */
+#root .radar-grid {
+  position: relative !important;
+  display: grid !important;
+
+  width: 100% !important;
+
+  margin: 18px 0 0 !important;
+  padding: 0 !important;
+
+  inset: auto !important;
+  transform: none !important;
+
+  z-index: 1 !important;
+}
+
+/* CARDS */
+#root .radar-card {
+  position: relative !important;
+  inset: auto !important;
+  transform: none !important;
+
+  width: auto !important;
+  max-width: none !important;
+
+  box-sizing: border-box !important;
+}
+
+/* ============================================================
+   PROTEÇÃO CONTRA POSICIONAMENTO ANTIGO
+   ============================================================ */
+
+#root .prompt-row,
+#root .radar-section,
+#root .radar-toolbar,
+#root .radar-grid,
+#root .radar-card {
+  animation: none !important;
+}
+
+/* ============================================================
+   DESKTOP
+   ============================================================ */
+
+@media (min-width: 761px) {
+
+  #root .command-section {
+    padding-top: 48px !important;
+  }
+
+  #root .prompt-row {
+    margin-top: 34px !important;
+    margin-bottom: 44px !important;
+  }
+
+  #root #radar {
+    margin-top: 0 !important;
+  }
+
+}
+
+/* ============================================================
+   MOBILE
+   ============================================================ */
+
+@media (max-width: 760px) {
+
+  #root .command-section {
+    width: calc(100% - 24px) !important;
+    padding-top: 28px !important;
+  }
+
+  #root .prompt-row {
+    width: 100% !important;
+    min-height: 88px !important;
+    margin: 24px 0 32px !important;
+    padding: 8px !important;
+  }
+
+  #root .radar-section {
+    width: 100% !important;
+    margin: 0 !important;
+  }
+
+  #root .radar-toolbar {
+    gap: 10px !important;
+  }
+
+  #root .radar-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+}
+
+/* ============================================================
+   FIM DO LAYOUT DEFINITIVO
+   ============================================================ */
+
+
+/* ============================================================
+   IRIS 5.3 — LAYOUT FINAL
+   Correção visual sem alteração da lógica
+   ============================================================ */
+
+html,
+body,
+#root {
+  width: 100%;
+  min-width: 0;
+  min-height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  overflow-x: hidden;
+}
+
+body {
+  overflow-x: hidden;
+}
+
+/* Container principal */
+#root {
+  display: block;
+}
+
+/* Evita que componentes antigos criem deslocamento horizontal */
+#root * {
+  box-sizing: border-box;
+}
+
+/* Área principal */
+html body #root main,
+html body #root .app,
+html body #root .page,
+html body #root .command-center {
+  width: 100%;
+  max-width: 1440px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+/* Cabeçalho / topo */
+html body #root .command-top {
+  width: 100%;
+  max-width: 1440px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+/* Hero */
+html body #root .hero,
+html body #root .command-hero {
+  max-width: 1200px;
+  margin-left: auto;
+  margin-right: auto;
+  padding-top: 28px !important;
+  padding-bottom: 18px !important;
+}
+
+/* Logo central */
+html body #root .hero svg,
+html body #root .command-hero svg {
+  max-width: 150px;
+  max-height: 150px;
+}
+
+/* Título principal */
+html body #root h1 {
+  line-height: 1.05;
+}
+
+/* Barra de comando */
+html body #root .prompt-row {
+  width: min(1200px, calc(100% - 48px)) !important;
+  max-width: 1200px !important;
+  margin-left: auto !important;
+  margin-right: auto !important;
+  position: relative !important;
+  z-index: 30 !important;
+}
+
+/* Radar */
+html body #root .radar,
+html body #root .radar-section,
+html body #root #radar {
+  width: min(1200px, calc(100% - 48px));
+  max-width: 1200px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+/* Toolbar do radar */
+html body #root .radar-toolbar {
+  position: relative !important;
+  transform: none !important;
+  width: 100%;
+  max-width: 1200px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+/* Cards do radar */
+html body #root .radar-card {
+  position: relative !important;
+  transform: none !important;
+}
+
+/* Nenhum elemento deve criar sobreposição acidental */
+html body #root .iris-command-anchor,
+html body #root .iris-command-anchor-inner {
+  position: relative;
+  transform: none;
+}
+
+/* Atalhos */
+html body #root .nav,
+html body #root .quick-actions,
+html body #root .command-actions {
+  max-width: 1200px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+/* Botões */
+html body #root button {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Desktop */
+@media (min-width: 1100px) {
+  html body #root .prompt-row {
+    min-height: 76px;
+  }
+
+  html body #root .hero,
+  html body #root .command-hero {
+    padding-top: 22px !important;
+    padding-bottom: 12px !important;
+  }
+}
+
+/* Tablet */
+@media (max-width: 1100px) {
+  html body #root .prompt-row {
+    width: calc(100% - 32px) !important;
+  }
+
+  html body #root .radar,
+  html body #root .radar-section,
+  html body #root #radar {
+    width: calc(100% - 32px);
+  }
+}
+
+/* Mobile */
+@media (max-width: 760px) {
+  html body #root .prompt-row {
+    width: calc(100% - 20px) !important;
+    min-height: 64px;
+  }
+
+  html body #root .radar,
+  html body #root .radar-section,
+  html body #root #radar {
+    width: calc(100% - 20px);
+  }
+
+  html body #root .hero,
+  html body #root .command-hero {
+    padding: 18px 12px !important;
+  }
+
+  html body #root h1 {
+    font-size: clamp(36px, 10vw, 58px);
+  }
+}
+
+/* Remove scroll horizontal causado por versões anteriores */
+html,
+body,
+#root {
+  max-width: 100vw;
+}
+
+
+/* ============================================================
+   IRIS 5.3 — LAYOUT FINAL
+   Correção visual sem alteração da lógica
+   ============================================================ */
+
+html,
+body,
+#root {
+  width: 100%;
+  min-width: 0;
+  min-height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  overflow-x: hidden;
+}
+
+body {
+  overflow-x: hidden;
+}
+
+/* Container principal */
+#root {
+  display: block;
+}
+
+/* Evita que componentes antigos criem deslocamento horizontal */
+#root * {
+  box-sizing: border-box;
+}
+
+/* Área principal */
+html body #root main,
+html body #root .app,
+html body #root .page,
+html body #root .command-center {
+  width: 100%;
+  max-width: 1440px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+/* Cabeçalho / topo */
+html body #root .command-top {
+  width: 100%;
+  max-width: 1440px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+/* Hero */
+html body #root .hero,
+html body #root .command-hero {
+  max-width: 1200px;
+  margin-left: auto;
+  margin-right: auto;
+  padding-top: 28px !important;
+  padding-bottom: 18px !important;
+}
+
+/* Logo central */
+html body #root .hero svg,
+html body #root .command-hero svg {
+  max-width: 150px;
+  max-height: 150px;
+}
+
+/* Título principal */
+html body #root h1 {
+  line-height: 1.05;
+}
+
+/* Barra de comando */
+html body #root .prompt-row {
+  width: min(1200px, calc(100% - 48px)) !important;
+  max-width: 1200px !important;
+  margin-left: auto !important;
+  margin-right: auto !important;
+  position: relative !important;
+  z-index: 30 !important;
+}
+
+/* Radar */
+html body #root .radar,
+html body #root .radar-section,
+html body #root #radar {
+  width: min(1200px, calc(100% - 48px));
+  max-width: 1200px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+/* Toolbar do radar */
+html body #root .radar-toolbar {
+  position: relative !important;
+  transform: none !important;
+  width: 100%;
+  max-width: 1200px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+/* Cards do radar */
+html body #root .radar-card {
+  position: relative !important;
+  transform: none !important;
+}
+
+/* Nenhum elemento deve criar sobreposição acidental */
+html body #root .iris-command-anchor,
+html body #root .iris-command-anchor-inner {
+  position: relative;
+  transform: none;
+}
+
+/* Atalhos */
+html body #root .nav,
+html body #root .quick-actions,
+html body #root .command-actions {
+  max-width: 1200px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+/* Botões */
+html body #root button {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Desktop */
+@media (min-width: 1100px) {
+  html body #root .prompt-row {
+    min-height: 76px;
+  }
+
+  html body #root .hero,
+  html body #root .command-hero {
+    padding-top: 22px !important;
+    padding-bottom: 12px !important;
+  }
+}
+
+/* Tablet */
+@media (max-width: 1100px) {
+  html body #root .prompt-row {
+    width: calc(100% - 32px) !important;
+  }
+
+  html body #root .radar,
+  html body #root .radar-section,
+  html body #root #radar {
+    width: calc(100% - 32px);
+  }
+}
+
+/* Mobile */
+@media (max-width: 760px) {
+  html body #root .prompt-row {
+    width: calc(100% - 20px) !important;
+    min-height: 64px;
+  }
+
+  html body #root .radar,
+  html body #root .radar-section,
+  html body #root #radar {
+    width: calc(100% - 20px);
+  }
+
+  html body #root .hero,
+  html body #root .command-hero {
+    padding: 18px 12px !important;
+  }
+
+  html body #root h1 {
+    font-size: clamp(36px, 10vw, 58px);
+  }
+}
+
+/* Remove scroll horizontal causado por versões anteriores */
+html,
+body,
+#root {
+  max-width: 100vw;
+}
+
+/* =========================================================
+   IRIS 5.3 — CORREÇÃO FINAL DO OVERLAY DO COMMAND CENTER
+   Remove posicionamento fixo/sticky causado por CSS legado.
+   Não altera lógica React.
+   ========================================================= */
+
+html body #root .iris-command-anchor,
+html body #root .iris-command-anchor-inner,
+html body #root .prompt-row,
+html body #root .command-top {
+  position: relative !important;
+  top: auto !important;
+  right: auto !important;
+  bottom: auto !important;
+  left: auto !important;
+  inset: auto !important;
+  transform: none !important;
+  translate: none !important;
+}
+
+html body #root .iris-command-anchor {
+  width: 100% !important;
+  max-width: 100% !important;
+  height: auto !important;
+  min-height: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  z-index: 1 !important;
+  pointer-events: auto !important;
+}
+
+html body #root .iris-command-anchor-inner {
+  width: 100% !important;
+  max-width: 100% !important;
+  height: auto !important;
+  min-height: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  z-index: 1 !important;
+}
+
+html body #root .prompt-row {
+  width: 100% !important;
+  max-width: 100% !important;
+  margin: 24px auto !important;
+  z-index: 5 !important;
+}
+
+html body #root .prompt-row > * {
+  position: relative !important;
+  transform: none !important;
+}
+
+html body #root .radar-toolbar,
+html body #root .radar-card,
+html body #root .radar-grid,
+html body #root .task-grid {
+  position: relative !important;
+  transform: none !important;
+}
+
+html body #root {
+  overflow-x: hidden !important;
+}
+
+@media (max-width: 760px) {
+  html body #root .prompt-row {
+    width: calc(100% - 24px) !important;
+    margin: 16px 12px !important;
+  }
+}
+
+
+/* =========================================================
+   IRIS 5.3 — CORREÇÃO DEFINITIVA DE LAYOUT
+   Remove sobreposição/floating indevido do Command Center.
+   Não altera lógica ou componentes.
+   ========================================================= */
+
+html, body, #root {
+  min-height: 100%;
+  height: auto !important;
+  overflow-x: hidden !important;
+  overflow-y: auto !important;
+}
+
+/* O comando pertence ao fluxo normal da página */
+html body #root .prompt-row,
+html body #root .iris-command-anchor {
+  position: relative !important;
+  inset: auto !important;
+  top: auto !important;
+  right: auto !important;
+  bottom: auto !important;
+  left: auto !important;
+  transform: none !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  margin-left: auto !important;
+  margin-right: auto !important;
+  z-index: 20 !important;
+}
+
+/* Conteúdo interno não pode ficar fixo sobre o Radar */
+html body #root .iris-command-anchor-inner {
+  position: relative !important;
+  inset: auto !important;
+  transform: none !important;
+  width: 100% !important;
+  max-width: 100% !important;
+}
+
+/* Evita que o campo de comando atravesse cards durante scroll */
+html body #root .prompt-row > *,
+html body #root .iris-command-anchor > * {
+  position: relative !important;
+}
+
+/* Radar permanece no fluxo normal */
+html body #root section,
+html body #root main {
+  position: relative;
+}
+
+/* Não permitir que elementos do topo cubram o conteúdo */
+html body #root .prompt-row {
+  float: none !important;
+  clear: both !important;
+}
+
+/* Segurança contra transformações antigas */
+html body #root .prompt-row,
+html body #root .iris-command-anchor,
+html body #root .iris-command-anchor-inner {
+  animation: none !important;
+}
+
+/* =========================================================
+   RESPONSIVO
+   ========================================================= */
+
+@media (max-width: 760px) {
+  html body #root .prompt-row,
+  html body #root .iris-command-anchor {
+    width: calc(100% - 24px) !important;
+    margin-left: 12px !important;
+    margin-right: 12px !important;
+  }
+}
+
+
+.iris-logo {
+  width: 48px;
+  height: 48px;
+  object-fit: cover;
+  border-radius: 50%;
+  display: block;
+  box-shadow:
+    0 0 0 2px rgba(63, 170, 255, 0.55 ),
+    0 0 18px rgba(0, 132, 255, 0.9),
+    0 0 34px rgba(0, 72, 255, 0.55);
+}
+
+
+.button-like { display: inline-flex; align-items: center; gap: 7px; min-height: 42px; padding: 0 14px; border: 1px solid rgba(148, 163, 184, .35); border-radius: 8px; cursor: pointer; color: inherit; background: transparent; font-size: 14px; }
+.button-like:hover { background: rgba(148, 163, 184, .12); }

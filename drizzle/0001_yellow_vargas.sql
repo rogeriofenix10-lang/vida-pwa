@@ -1,0 +1,1 @@
+ALTER TABLE `users` ADD `aiProvider` enum('manus','chatgpt','gemini','kimi') DEFAULT 'manus' NOT NULL;

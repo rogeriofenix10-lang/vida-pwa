@@ -1,0 +1,1 @@
+ALTER TABLE `users` ADD `externalAiConsent` boolean DEFAULT false NOT NULL;

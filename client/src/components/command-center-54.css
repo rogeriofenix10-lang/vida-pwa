@@ -1,0 +1,1298 @@
+/* ==========================================================================
+   IRIS COMMAND CENTER 5.4 — INTERFACE DEFINITIVA OFICIAL
+   Layout Minimalista e Centralizado com Olho Ocular Realista
+   ========================================================================== */
+
+:root {
+  --iris-bg: #060b16;
+  --iris-bg-alt: #0a1324;
+  --iris-surface: #0e1a30;
+  --iris-surface-glass: rgba(14, 26, 48, 0.72);
+  --iris-surface-card: rgba(17, 31, 58, 0.65);
+  --iris-border: rgba(96, 140, 216, 0.16);
+  --iris-border-bright: rgba(56, 189, 248, 0.45);
+  --iris-text: #f0f4fc;
+  --iris-muted: #8ba2c4;
+  --iris-muted-dim: #5c7294;
+  --iris-blue: #3b82f6;
+  --iris-cyan: #22d3ee;
+  --iris-indigo: #6366f1;
+  --iris-purple: #8b5cf6;
+  --iris-red: #f43f5e;
+  --iris-yellow: #f59e0b;
+  --iris-green: #10b981;
+}
+
+.iris54-root {
+  min-height: 100vh;
+  min-height: 100dvh;
+  width: 100%;
+  background:
+    radial-gradient(
+      circle at 50% 20%,
+      rgba(59, 130, 246, 0.2),
+      transparent 44rem
+    ),
+    radial-gradient(
+      circle at 85% 30%,
+      rgba(34, 211, 238, 0.12),
+      transparent 36rem
+    ),
+    radial-gradient(
+      circle at 15% 70%,
+      rgba(139, 92, 246, 0.1),
+      transparent 36rem
+    ),
+    var(--iris-bg);
+  color: var(--iris-text);
+  font-family:
+    "DM Sans",
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    Roboto,
+    sans-serif;
+  overflow-x: hidden;
+  position: relative;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px 24px;
+}
+
+.iris54-root *,
+.iris54-root *::before,
+.iris54-root *::after {
+  box-sizing: border-box;
+}
+
+/* --------------------------------------------------------------------------
+   MARCA FLUTUANTE — sem barra superior fixa
+   -------------------------------------------------------------------------- */
+.iris54-floating-brand {
+  position: absolute;
+  top: 18px;
+  left: 22px;
+  z-index: 12;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 4px;
+  color: var(--iris-text);
+  cursor: pointer;
+  user-select: none;
+  transition:
+    opacity 0.2s ease,
+    transform 0.2s ease;
+}
+
+.iris54-floating-brand:hover,
+.iris54-floating-brand:focus-visible {
+  opacity: 0.86;
+  transform: translateY(-1px);
+  outline: none;
+}
+
+.iris54-floating-brand .iris54-brand-eye-real {
+  width: 28px !important;
+  height: 28px !important;
+  max-width: 28px !important;
+  flex: 0 0 28px;
+  margin: 0 !important;
+  border: 0 !important;
+  box-shadow: 0 0 14px rgba(34, 211, 238, 0.34) !important;
+}
+
+.iris54-floating-brand .iris54-brand-eye-real .iris54-ocular-eye-frame {
+  border-radius: 50%;
+}
+
+.iris54-floating-brand .iris54-brand-text strong {
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.iris54-topbar {
+  width: 100%;
+  max-width: 1200px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  padding: 4px 12px 0;
+  flex: 0 0 auto;
+  z-index: 10;
+}
+
+.iris54-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  user-select: none;
+  transition: opacity 0.2s ease;
+}
+
+.iris54-brand:hover {
+  opacity: 0.85;
+}
+
+.iris54-brand-eye {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 1px solid rgba(56, 189, 248, 0.5);
+  background: radial-gradient(circle, #0284c7 0%, #0c1a32 80%);
+  display: grid;
+  place-items: center;
+  box-shadow: 0 0 12px rgba(34, 211, 238, 0.4);
+}
+
+.iris54-brand-eye-core {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #38bdf8;
+  box-shadow: 0 0 8px #38bdf8;
+}
+
+.iris54-brand-eye-real {
+  width: 30px !important;
+  height: 30px !important;
+  max-width: 30px !important;
+  margin: 0 !important;
+  border: 0 !important;
+  box-shadow: 0 0 12px rgba(34, 211, 238, 0.45) !important;
+  flex: 0 0 30px;
+  cursor: pointer;
+}
+.iris54-brand-eye-real .iris54-ocular-eye-frame {
+  border-radius: 50%;
+}
+
+.iris54-brand-text {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.1;
+}
+
+.iris54-brand-text strong {
+  font-size: 16px;
+  font-weight: 700;
+  color: #fff;
+  letter-spacing: -0.02em;
+}
+
+.iris54-brand-text strong span {
+  color: var(--iris-cyan);
+}
+
+.iris54-brand-text small {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--iris-muted-dim);
+}
+
+.iris54-status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 14px;
+  border-radius: 9999px;
+  border: 1px solid rgba(34, 211, 238, 0.25);
+  background: rgba(14, 26, 48, 0.55);
+  backdrop-filter: blur(8px);
+  font-size: 12px;
+  font-weight: 600;
+  color: #a5f3fc;
+  letter-spacing: 0.04em;
+}
+
+.iris54-live-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #22d3ee;
+  box-shadow:
+    0 0 8px #22d3ee,
+    0 0 14px rgba(34, 211, 238, 0.8);
+  display: inline-block;
+  animation: iris54-live-dot-pulse 2s infinite;
+}
+
+@keyframes iris54-live-dot-pulse {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.5;
+    transform: scale(0.85);
+  }
+}
+
+/* --------------------------------------------------------------------------
+   EXPERIÊNCIA CENTRALIZADA
+   -------------------------------------------------------------------------- */
+.iris54-main-container {
+  width: min(1040px, 94%);
+  margin: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  flex: 1 1 auto;
+  padding: 10px 0;
+}
+
+.iris54-hero {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  position: relative;
+}
+
+/* ÍRIS OCULAR CIRCULAR TECNOLÓGICA */
+.iris54-ocular-eye-wrapper {
+  position: relative;
+  width: min(220px, 58vw);
+  max-width: 230px;
+  height: auto;
+  aspect-ratio: 1 / 1;
+  border-radius: 50%;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 20px;
+  cursor: pointer;
+  transition:
+    transform 0.3s ease,
+    box-shadow 0.3s ease;
+  animation: iris54-eye-pulse 4.5s ease-in-out infinite;
+  user-select: none;
+  background: #020617;
+  border: 0;
+  outline: 0;
+  box-shadow:
+    0 0 28px rgba(34, 211, 238, 0.45),
+    0 0 60px rgba(59, 130, 246, 0.3);
+}
+
+.iris54-ocular-eye-wrapper:hover {
+  transform: scale(1.04);
+  box-shadow:
+    0 0 36px rgba(34, 211, 238, 0.65),
+    0 0 75px rgba(59, 130, 246, 0.45);
+  border-color: transparent;
+}
+
+.iris54-ocular-eye-frame {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.iris54-central-eye {
+  background: transparent;
+  box-shadow: none;
+  animation: none;
+}
+
+.iris54-central-eye:hover {
+  box-shadow: none;
+  transform: none;
+}
+
+.iris54-central-eye .iris54-ocular-eye-overlay {
+  display: none;
+}
+
+.iris54-ocular-eye-img,
+.iris54-ocular-eye-svg {
+  position: absolute;
+  width: 154%;
+  height: 112%;
+  max-width: none;
+  max-height: none;
+  left: -23.7%;
+  top: -13.4%;
+  object-fit: cover;
+  display: block;
+  pointer-events: none;
+}
+
+.iris54-ocular-eye-overlay {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  pointer-events: none;
+  box-shadow:
+    inset 0 0 20px rgba(34, 211, 238, 0.35),
+    inset 0 0 45px rgba(14, 165, 233, 0.2);
+  background: radial-gradient(
+    circle at 50% 50%,
+    transparent 64%,
+    rgba(2, 6, 23, 0.4) 100%
+  );
+}
+
+/* SAUDAÇÃO E SUBTÍTULO */
+.iris54-hero h1,
+.iris54-hero-title {
+  margin: 0;
+  font-size: clamp(38px, 4.8vw, 60px);
+  font-weight: 600;
+  letter-spacing: -0.04em;
+  color: #f8fafc;
+  line-height: 1.15;
+  font-family:
+    "DM Sans",
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    Roboto,
+    sans-serif;
+}
+
+.iris54-hero h1 span,
+.iris54-hero-dot {
+  color: var(--iris-cyan);
+  font-weight: 700;
+}
+
+.iris54-hero-subtitle {
+  margin: 10px 0 28px;
+  font-size: clamp(16px, 1.8vw, 22px);
+  color: var(--iris-muted);
+  font-weight: 400;
+  letter-spacing: -0.01em;
+}
+
+.iris54-hero-title,
+.iris54-hero-subtitle {
+  display: none;
+}
+
+.iris54-tagline {
+  margin: -2px 0 22px !important;
+  color: #ffffff !important;
+  font-size: clamp(1.1rem, 2.1vw, 1.55rem) !important;
+  font-weight: 800 !important;
+  letter-spacing: -0.025em !important;
+  line-height: 1.2 !important;
+}
+
+/* --------------------------------------------------------------------------
+   BARRA DE COMANDO CENTRAL
+   -------------------------------------------------------------------------- */
+.iris54-command-bar {
+  width: min(880px, 100%);
+  min-height: 64px;
+  border-radius: 9999px;
+  background: rgba(13, 24, 46, 0.88);
+  border: 1px solid rgba(96, 140, 216, 0.28);
+  box-shadow:
+    0 20px 50px rgba(0, 0, 0, 0.45),
+    inset 0 0 30px rgba(59, 130, 246, 0.06);
+  backdrop-filter: blur(20px);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px 8px 16px;
+  transition: all 0.25s ease;
+  position: relative;
+  z-index: 20;
+}
+
+.iris54-command-bar:focus-within {
+  border-color: rgba(56, 189, 248, 0.7);
+  box-shadow:
+    0 24px 60px rgba(0, 0, 0, 0.55),
+    0 0 30px rgba(56, 189, 248, 0.22),
+    inset 0 0 35px rgba(59, 130, 246, 0.1);
+  transform: translateY(-1px);
+}
+
+/* BOTÃO DE VOZ / MICROFONE */
+.iris54-cmd-mic {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  border: 0;
+  background: rgba(59, 130, 246, 0.12);
+  color: var(--iris-cyan);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  flex: 0 0 auto;
+}
+
+.iris54-cmd-mic:hover {
+  background: rgba(59, 130, 246, 0.25);
+  color: #fff;
+  transform: scale(1.05);
+}
+
+.iris54-cmd-mic.listening {
+  background: var(--iris-red);
+  color: #fff;
+  box-shadow: 0 0 20px rgba(244, 63, 94, 0.7);
+  animation: iris54-mic-pulse 1.2s infinite;
+}
+
+/* INPUT CENTRAL */
+.iris54-cmd-input {
+  flex: 1;
+  min-width: 0;
+  height: 52px;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: #f8fafc;
+  font-size: 18px;
+  padding: 0 10px;
+}
+
+.iris54-cmd-input::placeholder {
+  color: var(--iris-muted-dim);
+  font-size: 17px;
+}
+
+/* ATALHOS EMBUTIDOS NA BARRA */
+.iris54-cmd-tools {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.iris54-cmd-tool-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 0;
+  background: transparent;
+  color: var(--iris-muted);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  font-size: 16px;
+  transition: all 0.18s ease;
+}
+
+.iris54-cmd-tool-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+  transform: translateY(-1px);
+}
+
+/* BOTÃO DE ENVIO */
+.iris54-cmd-send {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  border: 0;
+  background: linear-gradient(135deg, #3b82f6, #6366f1);
+  color: #fff;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  box-shadow: 0 6px 20px rgba(59, 130, 246, 0.45);
+  transition: all 0.2s ease;
+  flex: 0 0 auto;
+}
+
+.iris54-cmd-send:hover:not(:disabled) {
+  transform: scale(1.05);
+  box-shadow: 0 8px 26px rgba(59, 130, 246, 0.65);
+}
+
+.iris54-cmd-send:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* --------------------------------------------------------------------------
+   NAVEGAÇÃO INFERIOR — OS SEIS BOTÕES PRINCIPAIS
+   -------------------------------------------------------------------------- */
+.iris54-quick-nav {
+  position: relative;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 28px;
+  width: 100%;
+}
+
+.iris54-module-menu {
+  position: relative;
+  z-index: 30;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(120px, 1fr));
+  gap: 8px;
+  width: min(720px, 100%);
+  margin: 12px auto 0;
+  padding: 10px;
+  border: 1px solid rgba(96, 140, 216, 0.24);
+  border-radius: 18px;
+  background: rgba(8, 19, 37, 0.94);
+  box-shadow: 0 18px 45px rgba(0, 0, 0, 0.35);
+}
+
+.iris54-module-menu a {
+  padding: 10px 12px;
+  border-radius: 10px;
+  color: #cbd5e1;
+  background: rgba(14, 26, 48, 0.72);
+  text-align: center;
+  text-decoration: none;
+  font-size: 13px;
+}
+
+.iris54-module-menu a:hover {
+  color: #fff;
+  background: rgba(34, 211, 238, 0.16);
+}
+
+.iris54-quick-btn {
+  min-width: 148px;
+  height: 50px;
+  padding: 0 20px;
+  border-radius: 999px;
+  border: 1px solid rgba(96, 140, 216, 0.22);
+  background: rgba(14, 26, 48, 0.6);
+  backdrop-filter: blur(12px);
+  color: #cbd5e1;
+  font-size: 15px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.iris54-quick-btn span.icon {
+  font-size: 17px;
+  color: var(--iris-cyan);
+  display: inline-flex;
+  align-items: center;
+}
+
+.iris54-quick-btn:hover {
+  border-color: rgba(56, 189, 248, 0.55);
+  background: rgba(28, 48, 86, 0.65);
+  color: #fff;
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.25);
+}
+
+.iris54-quick-btn:active {
+  transform: translateY(0);
+}
+
+.iris54-quick-btn.active {
+  border-color: rgba(56, 189, 248, 0.7);
+  background: rgba(34, 211, 238, 0.18);
+  color: #fff;
+  box-shadow: 0 0 16px rgba(34, 211, 238, 0.3);
+}
+
+.iris54-top-btn {
+  height: 34px;
+  padding: 0 12px;
+  border-radius: 8px;
+  border: 1px solid var(--iris-border);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--iris-muted);
+  font-size: 12px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.iris54-top-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+}
+
+.iris54-top-btn.primary {
+  background: rgba(59, 130, 246, 0.2);
+  border-color: rgba(59, 130, 246, 0.4);
+  color: #93c5fd;
+}
+
+/* --------------------------------------------------------------------------
+   MODAL / OVERLAY DINÂMICO PARA AS SEÇÕES
+   -------------------------------------------------------------------------- */
+.iris54-view-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  background: rgba(4, 8, 16, 0.84);
+  backdrop-filter: blur(16px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  animation: iris54-fade-in 0.2s ease;
+}
+
+.iris54-view-container {
+  width: min(1040px, 95vw);
+  max-height: 88vh;
+  overflow-y: auto;
+  background: #0c172a;
+  border: 1px solid rgba(96, 140, 216, 0.3);
+  border-radius: 24px;
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.7);
+  padding: 30px;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+
+.iris54-view-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding-bottom: 20px;
+  border-bottom: 1px solid var(--iris-border);
+  margin-bottom: 20px;
+}
+
+.iris54-view-header h2 {
+  margin: 4px 0 0;
+  font-size: 24px;
+  font-weight: 700;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.iris54-view-header p {
+  margin: 4px 0 0;
+  font-size: 14px;
+  color: var(--iris-muted);
+}
+
+.iris54-close-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 1px solid var(--iris-border);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--iris-muted);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  flex: 0 0 auto;
+}
+
+.iris54-close-btn:hover {
+  background: rgba(244, 63, 94, 0.2);
+  border-color: rgba(244, 63, 94, 0.5);
+  color: #fff;
+}
+
+/* FEED DO CHAT NO MODAL */
+.iris54-chat-feed {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-height: 440px;
+  overflow-y: auto;
+  padding: 10px 4px 14px;
+}
+
+.iris54-chat-bubble {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  max-width: 88%;
+}
+
+.iris54-chat-bubble.user {
+  align-self: flex-end;
+  flex-direction: row-reverse;
+}
+
+.iris54-chat-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.iris54-chat-bubble.assistant .iris54-chat-avatar {
+  background: linear-gradient(135deg, var(--iris-blue), var(--iris-cyan));
+  color: #fff;
+}
+
+.iris54-chat-bubble.user .iris54-chat-avatar {
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+}
+
+.iris54-chat-text {
+  padding: 12px 16px;
+  border-radius: 16px;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.iris54-chat-bubble.assistant .iris54-chat-text {
+  background: rgba(18, 34, 62, 0.9);
+  color: #e2e8f0;
+  border: 1px solid var(--iris-border);
+  border-top-left-radius: 4px;
+}
+
+.iris54-chat-bubble.user .iris54-chat-text {
+  background: linear-gradient(135deg, #2563eb, #1d4ed8);
+  color: #fff;
+  border-top-right-radius: 4px;
+}
+
+.iris54-typing-indicator {
+  display: flex;
+  gap: 4px;
+  padding: 8px 12px;
+}
+
+.iris54-typing-indicator span {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--iris-cyan);
+  animation: iris54-bounce 1.2s infinite;
+}
+
+.iris54-typing-indicator span:nth-child(2) {
+  animation-delay: 0.2s;
+}
+.iris54-typing-indicator span:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+/* --------------------------------------------------------------------------
+   ELEMENTOS DO RADAR DENTRO DO MODAL
+   -------------------------------------------------------------------------- */
+.iris54-kicker {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.15em;
+  color: var(--iris-cyan);
+  text-transform: uppercase;
+  display: block;
+}
+
+/* STATS */
+.iris54-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 14px;
+  margin-bottom: 24px;
+}
+
+.iris54-stat-card {
+  padding: 16px 18px;
+  border-radius: 16px;
+  background: var(--iris-surface-glass);
+  border: 1px solid var(--iris-border);
+  backdrop-filter: blur(12px);
+}
+
+.iris54-stat-card strong {
+  display: block;
+  font-size: 28px;
+  font-weight: 800;
+  color: #fff;
+  line-height: 1.1;
+}
+
+.iris54-stat-card span {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--iris-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-top: 4px;
+  display: block;
+}
+
+/* TOOLBAR & FILTROS */
+.iris54-toolbar {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-bottom: 22px;
+}
+
+.iris54-search-row {
+  display: flex;
+  gap: 12px;
+}
+
+.iris54-search-box {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 16px;
+  height: 46px;
+  border-radius: 14px;
+  background: rgba(14, 26, 48, 0.7);
+  border: 1px solid var(--iris-border);
+  color: var(--iris-muted);
+}
+
+.iris54-search-box input {
+  flex: 1;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: #fff;
+  font-size: 14px;
+}
+
+.iris54-filter-pills {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.iris54-filter-btn {
+  padding: 7px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--iris-border);
+  background: rgba(255, 255, 255, 0.02);
+  color: var(--iris-muted);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.18s ease;
+}
+
+.iris54-filter-btn:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: #fff;
+}
+
+.iris54-filter-btn.active {
+  background: rgba(59, 130, 246, 0.2);
+  border-color: rgba(56, 189, 248, 0.5);
+  color: #fff;
+}
+
+/* GRID DE TAREFAS */
+.iris54-task-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.iris54-task-card {
+  padding: 18px 20px;
+  border-radius: 18px;
+  background: var(--iris-surface-glass);
+  border: 1px solid var(--iris-border);
+  backdrop-filter: blur(12px);
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  overflow: hidden;
+  transition: all 0.2s ease;
+}
+
+.iris54-task-card:hover {
+  border-color: rgba(96, 165, 250, 0.35);
+  transform: translateY(-2px);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.3);
+}
+
+.iris54-task-card::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 4px;
+  background: #64748b;
+}
+
+.iris54-task-card.priority-urgente::before {
+  background: var(--iris-red);
+}
+.iris54-task-card.priority-importante::before {
+  background: var(--iris-yellow);
+}
+.iris54-task-card.priority-atencao::before {
+  background: #f97316;
+}
+.iris54-task-card.priority-normal::before {
+  background: var(--iris-green);
+}
+.iris54-task-card.priority-informacao::before {
+  background: var(--iris-cyan);
+}
+
+.iris54-task-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.iris54-priority-badge {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  padding: 3px 8px;
+  border-radius: 6px;
+}
+
+.priority-urgente .iris54-priority-badge {
+  background: rgba(244, 63, 94, 0.15);
+  color: var(--iris-red);
+}
+.priority-importante .iris54-priority-badge {
+  background: rgba(245, 158, 11, 0.15);
+  color: var(--iris-yellow);
+}
+.priority-atencao .iris54-priority-badge {
+  background: rgba(249, 115, 22, 0.15);
+  color: #f97316;
+}
+.priority-normal .iris54-priority-badge {
+  background: rgba(16, 185, 129, 0.15);
+  color: var(--iris-green);
+}
+.priority-informacao .iris54-priority-badge {
+  background: rgba(34, 211, 238, 0.15);
+  color: var(--iris-cyan);
+}
+
+.iris54-task-date {
+  font-size: 12px;
+  color: var(--iris-muted);
+}
+
+.iris54-task-card h3 {
+  margin: 0 0 6px;
+  font-size: 16px;
+  font-weight: 700;
+  color: #fff;
+}
+
+.iris54-task-card p {
+  margin: 0;
+  font-size: 13px;
+  color: var(--iris-muted);
+  line-height: 1.45;
+}
+
+.iris54-task-divider {
+  height: 1px;
+  background: rgba(255, 255, 255, 0.06);
+  margin: 14px 0 10px;
+}
+
+.iris54-task-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.iris54-task-action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--iris-muted);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: color 0.15s ease;
+}
+
+.iris54-task-action-btn:hover {
+  color: #fff;
+}
+
+.iris54-task-action-btn.done:hover {
+  color: var(--iris-green);
+}
+.iris54-task-action-btn.snooze:hover {
+  color: var(--iris-yellow);
+}
+.iris54-task-action-btn.delete:hover {
+  color: var(--iris-red);
+}
+
+/* --------------------------------------------------------------------------
+   GRIDS DENTRO DOS MODAIS (AGENDA, ARQUIVOS, ANÁLISES, FERRAMENTAS)
+   -------------------------------------------------------------------------- */
+.iris54-feature-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  margin-top: 18px;
+}
+
+.iris54-feature-card {
+  padding: 20px;
+  border-radius: 16px;
+  background: rgba(11, 22, 40, 0.7);
+  border: 1px solid var(--iris-border);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  transition: all 0.2s ease;
+}
+
+.iris54-feature-card:hover {
+  border-color: rgba(96, 165, 250, 0.4);
+  transform: translateY(-2px);
+}
+
+.iris54-feature-card strong {
+  font-size: 15px;
+  color: #fff;
+}
+
+.iris54-feature-card p {
+  margin: 0;
+  font-size: 13px;
+  color: var(--iris-muted);
+  line-height: 1.45;
+}
+
+/* CARDS DE SEGURANÇA E PRIVACIDADE */
+.iris54-footer-cards {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  margin-top: 24px;
+  width: 100%;
+}
+
+.iris54-footer-card {
+  padding: 18px;
+  border-radius: 16px;
+  background: rgba(11, 20, 36, 0.6);
+  border: 1px solid var(--iris-border);
+}
+
+.iris54-footer-card strong {
+  display: block;
+  font-size: 15px;
+  margin-top: 6px;
+  color: #fff;
+}
+
+.iris54-footer-card p {
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: var(--iris-muted);
+  line-height: 1.5;
+}
+
+/* --------------------------------------------------------------------------
+   MODAIS & DIÁLOGOS (PROPOSTA, EDIÇÃO, ONBOARDING)
+   -------------------------------------------------------------------------- */
+.iris54-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(4, 8, 16, 0.82);
+  backdrop-filter: blur(10px);
+}
+
+.iris54-modal-box {
+  width: min(100%, 500px);
+  padding: 28px;
+  border-radius: 24px;
+  background: #0c182e;
+  border: 1px solid rgba(96, 140, 216, 0.3);
+  box-shadow: 0 25px 70px rgba(0, 0, 0, 0.65);
+  color: #fff;
+}
+
+.iris54-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 24px;
+}
+
+/* --------------------------------------------------------------------------
+   ANIMAÇÕES
+   -------------------------------------------------------------------------- */
+@keyframes iris54-fade-in {
+  from {
+    opacity: 0;
+    transform: scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes iris54-eye-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+    box-shadow:
+      0 0 24px rgba(34, 211, 238, 0.4),
+      0 0 50px rgba(59, 130, 246, 0.25);
+  }
+  50% {
+    transform: scale(1.03);
+    box-shadow:
+      0 0 35px rgba(34, 211, 238, 0.65),
+      0 0 75px rgba(59, 130, 246, 0.45);
+  }
+}
+
+@keyframes iris54-mic-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.12);
+  }
+}
+
+@keyframes iris54-bounce {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-4px);
+  }
+}
+
+/* --------------------------------------------------------------------------
+   RESPONSIVIDADE (TABLET & CELULAR)
+   -------------------------------------------------------------------------- */
+@media (max-width: 900px) {
+  .iris54-stats-grid,
+  .iris54-feature-grid,
+  .iris54-footer-cards {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .iris54-task-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 760px) {
+  .iris54-root {
+    padding: 24px 16px;
+  }
+
+  .iris54-main-container {
+    width: 100%;
+  }
+
+  .iris54-ocular-eye-wrapper {
+    width: min(180px, 52vw);
+    max-width: 190px;
+    margin: 0 auto 16px;
+  }
+
+  .iris54-hero h1 {
+    font-size: 36px;
+  }
+
+  .iris54-hero-subtitle {
+    font-size: 16px;
+    margin: 10px 0 24px;
+  }
+
+  .iris54-command-bar {
+    min-height: 60px;
+    padding: 6px 8px 6px 12px;
+  }
+
+  .iris54-cmd-mic {
+    width: 42px;
+    height: 42px;
+  }
+
+  .iris54-cmd-tools {
+    display: none;
+  }
+
+  .iris54-cmd-input {
+    font-size: 15px;
+    height: 44px;
+  }
+
+  .iris54-cmd-send {
+    width: 44px;
+    height: 44px;
+  }
+
+  .iris54-quick-nav {
+    gap: 8px;
+    margin-top: 20px;
+  }
+
+  .iris54-quick-btn {
+    min-width: calc(50% - 6px);
+    height: 44px;
+    font-size: 13px;
+    padding: 0 14px;
+  }
+  .iris54-module-menu {
+    grid-template-columns: repeat(2, minmax(120px, 1fr));
+  }
+
+  .iris54-stats-grid,
+  .iris54-feature-grid,
+  .iris54-footer-cards {
+    grid-template-columns: 1fr;
+  }
+
+  .iris54-view-container {
+    padding: 20px;
+  }
+}

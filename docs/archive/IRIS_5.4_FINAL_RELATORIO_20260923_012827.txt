@@ -1,0 +1,11 @@
+IRIS 5.4 — RELATÓRIO
+Data: Wed Sep 23 01:28:33 AM UTC 2026
+Build: OK
+Backup: backup_iris54_20260923_012827
+
+Ajustes aplicados:
+- seletor de IA ocultado
+- conversa de demonstração ocultada na Home
+- bloco Próximo passo ocultado
+- comando e Radar preservados
+- backup criado antes das alterações
