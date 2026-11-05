@@ -34,3 +34,10 @@ Reduzir a densidade visual da Home sem remover funções e criar um fluxo local-
 - O build não consulta autenticação, tRPC ou backend e mantém os dados no navegador.
 - O workflow `.github/workflows/deploy-pages.yml` publica `dist/public` no GitHub Pages sem custo.
 - Recursos conectados permanecem desativados até existir backend e autorização explícita.
+
+## Fase autorizada de expansão 2026-11
+- Preservar R2+D1, Gemini protegido no Worker, Gmail somente leitura, OCR local, fallback local, quota de 98% e confirmações de ações sensíveis.
+- Expor pelo Worker D1 a memória autorizada, tarefas sincronizadas e cadastro comercial, sem depender de `/api/trpc` no Pages estático.
+- Manter Drive e Calendar atrás de OAuth e escopos explícitos; leituras podem ser preparadas, mas escritas exigem aprovação.
+- Adicionar capacidades de visão, tradução, comparação documental e geração de arquivos no Gemini sem expor chaves no frontend.
+- Não ativar WhatsApp, Instagram, Facebook, TikTok, X, Outlook, Waze ou reservas de viagem sem credenciais e autorização próprias.

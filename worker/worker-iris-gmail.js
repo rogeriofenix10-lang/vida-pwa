@@ -34,7 +34,7 @@ async function dbJson(req, env, kind) {
   if (!env.IRIS_DB) return json({ error: "Banco D1 não vinculado ao Worker." }, 503, req.headers.get("Origin"), env.ALLOWED_ORIGIN);
   const uid = userId(req, env);
   if (req.method === "GET") {
-    const tables = { settings: "iris_settings", radar: "iris_radar", finances: "iris_finances", documents: "iris_documents", conversations: "iris_conversations" };
+    const tables = { settings: "iris_settings", radar: "iris_radar", finances: "iris_finances", documents: "iris_documents", conversations: "iris_conversations", memories: "iris_memories", tasks: "iris_tasks", business: "iris_business" };
     const table = tables[kind]; if (!table) return json({ error: "Tipo inválido." }, 400, req.headers.get("Origin"), env.ALLOWED_ORIGIN);
     const r = await env.IRIS_DB.prepare(`SELECT * FROM ${table} WHERE user_id = ? ORDER BY updated_at DESC LIMIT 500`).bind(uid).all();
     return json({ items: r.results || [] }, 200, req.headers.get("Origin"), env.ALLOWED_ORIGIN);
@@ -51,6 +51,12 @@ async function dbJson(req, env, kind) {
     await env.IRIS_DB.prepare("INSERT OR REPLACE INTO iris_finances(id,user_id,type,description,amount_cents,status,due_at,payload,updated_at) VALUES(?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP)").bind(id,uid,String(body.type||"expense"),String(body.description||""),Number(body.amount_cents||0),String(body.status||"open"),body.due_at||null,JSON.stringify(body.payload||{})).run();
   } else if (kind === "documents") {
     await env.IRIS_DB.prepare("INSERT OR REPLACE INTO iris_documents(id,user_id,name,mime_type,storage_key,payload) VALUES(?,?,?,?,?,?)").bind(id,uid,String(body.name||""),body.mime_type||null,body.storage_key||null,JSON.stringify(body.payload||{})).run();
+  } else if (kind === "memories") {
+    await env.IRIS_DB.prepare("INSERT OR REPLACE INTO iris_memories(id,user_id,content,category,source,importance,updated_at) VALUES(?,?,?,?,?,?,CURRENT_TIMESTAMP)").bind(id,uid,String(body.content||""),String(body.category||"other"),String(body.source||"user-approved"),Math.min(5,Math.max(1,Number(body.importance||3)))).run();
+  } else if (kind === "tasks") {
+    await env.IRIS_DB.prepare("INSERT OR REPLACE INTO iris_tasks(id,user_id,title,detail,status,priority,category,due_at,recurrence,completed_at,payload,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP)").bind(id,uid,String(body.title||body.label||""),String(body.detail||""),String(body.status||"pending"),String(body.priority||"normal"),String(body.category||"Geral"),body.due_at||null,body.recurrence||null,body.completed_at||null,JSON.stringify(body.payload||{})).run();
+  } else if (kind === "business") {
+    await env.IRIS_DB.prepare("INSERT OR REPLACE INTO iris_business(id,user_id,kind,name,company,email,phone,notes,payload,updated_at) VALUES(?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP)").bind(id,uid,String(body.kind||"contact"),String(body.name||""),String(body.company||""),String(body.email||""),String(body.phone||""),String(body.notes||""),JSON.stringify(body.payload||{})).run();
   } else return json({ error: "Tipo inválido." }, 400, req.headers.get("Origin"), env.ALLOWED_ORIGIN);
   return json({ ok: true, id }, 200, req.headers.get("Origin"), env.ALLOWED_ORIGIN);
 }
@@ -134,7 +140,7 @@ async function handle(req, env) {
   if (url.pathname === "/storage/quota") return storageQuota(req, env);
   if (url.pathname === "/storage/upload") return storageUpload(req, env);
   const storageMatch = url.pathname.match(/^\/storage\/file\/([^/]+)$/); if (storageMatch) return storageFile(req, env, decodeURIComponent(storageMatch[1]));
-  const dataMatch = url.pathname.match(/^\/data\/(settings|radar|finances|documents|conversations)$/); if (dataMatch) return dbJson(req, env, dataMatch[1]);
+  const dataMatch = url.pathname.match(/^\/data\/(settings|radar|finances|documents|conversations|memories|tasks|business)$/); if (dataMatch) return dbJson(req, env, dataMatch[1]);
   if (req.method === "GET") return json({ ok: true, service: "iris-gemini-proxy", model: env.GEMINI_MODEL || DEFAULT_MODEL }, 200, o, c);
   if (req.method !== "POST") return json({ error: "Use POST." }, 405, o, c);
   let body; try { body = await req.json(); } catch { return json({ error: "JSON inválido." }, 400, o, c); }

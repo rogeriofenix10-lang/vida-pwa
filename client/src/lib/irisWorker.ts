@@ -46,7 +46,10 @@ export type IrisDataKind =
   | "radar"
   | "finances"
   | "documents"
-  | "conversations";
+  | "conversations"
+  | "memories"
+  | "tasks"
+  | "business";
 
 export type IrisDataRow = Record<string, unknown> & { id?: string };
 
