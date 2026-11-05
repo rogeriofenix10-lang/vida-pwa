@@ -6,6 +6,8 @@ const links = [
   ["/documentos", "Arquivo Inteligente", "Documentos, exames e gastos"],
   ["/catalogo", "Catálogo", "Produtos e importação CSV"],
   ["/comercial", "Comercial", "Clientes e fornecedores"],
+  ["/financas", "Finanças", "Receitas, despesas e fluxo de caixa"],
+  ["/google", "Google Workspace", "Drive e Calendar autorizados"],
   ["/offline", "Espaço offline", "Tarefas e notas locais"],
   ["/midia", "Estúdio de mídia", "Imagem, áudio e vídeo"],
   ["/seguranca", "Segurança", "Aprovações e backup"],

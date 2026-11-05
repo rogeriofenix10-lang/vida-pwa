@@ -6,7 +6,7 @@ import type { SupportedLanguage } from "@shared/irisLanguageAndUpload";
 import "./pwa-status-bar.css";
 
 type InstallPromptEvent = Event & { prompt: () => Promise<void>; userChoice: Promise<{ outcome: "accepted" | "dismissed" }> };
-const modules = [["/documentos", "Arquivo"], ["/catalogo", "Catálogo"], ["/comercial", "Comercial"], ["/offline", "Offline"], ["/midia", "Mídia"], ["/seguranca", "Segurança"], ["/diagnostico", "Diagnóstico"], ["/configuracoes", "Configurações"]] as const;
+const modules = [["/documentos", "Arquivo"], ["/catalogo", "Catálogo"], ["/comercial", "Comercial"], ["/financas", "Finanças"], ["/google", "Google"], ["/offline", "Offline"], ["/midia", "Mídia"], ["/seguranca", "Segurança"], ["/diagnostico", "Diagnóstico"], ["/configuracoes", "Configurações"]] as const;
 
 export default function PwaStatusBar() {
   const { language, setLanguage, copy } = useIrisLanguage();

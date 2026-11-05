@@ -21,6 +21,8 @@ const Settings = lazy(() => import("./pages/Settings"));
 const OfflineWorkspace = lazy(() => import("./pages/OfflineWorkspace"));
 const BusinessHub = lazy(() => import("./pages/BusinessHub"));
 const DocumentVault = lazy(() => import("./pages/DocumentVault"));
+const FinanceHub = lazy(() => import("./pages/FinanceHub"));
+const GoogleWorkspace = lazy(() => import("./pages/GoogleWorkspace"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 
 function Router() {
@@ -48,6 +50,8 @@ function Router() {
         <Route path="/offline" component={OfflineWorkspace} />
         <Route path="/comercial" component={BusinessHub} />
         <Route path="/documentos" component={DocumentVault} />
+        <Route path="/financas" component={FinanceHub} />
+        <Route path="/google" component={GoogleWorkspace} />
         <Route path="/404" component={NotFound} />
         <Route component={NotFound} />
       </Switch>

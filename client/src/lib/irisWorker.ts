@@ -165,3 +165,94 @@ export function gmailBody(message: GmailMessage) {
 export function gmailAuthUrl() {
   return `${IRIS_WORKER_URL}/oauth/start`;
 }
+
+export function googleAuthUrl(product: "drive" | "calendar") {
+  return `${IRIS_WORKER_URL}/oauth/start?product=${product}`;
+}
+
+export function googleDriveStatus() {
+  return request<{ authorized: boolean }>("/google/drive/status");
+}
+
+export type GoogleDriveFile = {
+  id: string;
+  name: string;
+  mimeType?: string;
+  modifiedTime?: string;
+  size?: string;
+  webViewLink?: string;
+  parents?: string[];
+  trashed?: boolean;
+};
+
+export function googleDriveFiles(query = "") {
+  return request<{ files?: GoogleDriveFile[] }>(`/google/drive/files?q=${encodeURIComponent(query)}`);
+}
+
+export function googleDriveCreateFolder(name: string, confirm = false) {
+  return request<GoogleDriveFile>("/google/drive/folders", {
+    method: "POST",
+    headers: { "X-Iris-Confirm": String(confirm) },
+    body: JSON.stringify({ name }),
+  });
+}
+
+export function googleDriveRename(id: string, name: string, confirm = false) {
+  return request<GoogleDriveFile>(`/google/drive/files/${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    headers: { "X-Iris-Confirm": String(confirm) },
+    body: JSON.stringify({ name }),
+  });
+}
+
+export function googleDriveCopy(id: string, name: string, confirm = false) {
+  return request<GoogleDriveFile>(`/google/drive/files/${encodeURIComponent(id)}/copy`, {
+    method: "POST",
+    headers: { "X-Iris-Confirm": String(confirm) },
+    body: JSON.stringify({ name }),
+  });
+}
+
+export function googleCalendarStatus() {
+  return request<{ authorized: boolean }>("/google/calendar/status");
+}
+
+export type GoogleCalendarEvent = {
+  id: string;
+  summary?: string;
+  description?: string;
+  location?: string;
+  start?: { date?: string; dateTime?: string };
+  end?: { date?: string; dateTime?: string };
+  recurrence?: string[];
+};
+
+export function googleCalendarEvents(timeMin?: string, timeMax?: string) {
+  const params = new URLSearchParams();
+  if (timeMin) params.set("timeMin", timeMin);
+  if (timeMax) params.set("timeMax", timeMax);
+  return request<{ items?: GoogleCalendarEvent[] }>(`/google/calendar/events?${params.toString()}`);
+}
+
+export function googleCalendarCreate(event: Record<string, unknown>, confirm = false) {
+  return request<GoogleCalendarEvent>("/google/calendar/events", {
+    method: "POST",
+    headers: { "X-Iris-Confirm": String(confirm) },
+    body: JSON.stringify(event),
+  });
+}
+
+export function googleCalendarUpdate(id: string, event: Record<string, unknown>, confirm = false) {
+  return request<GoogleCalendarEvent>(`/google/calendar/events/${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    headers: { "X-Iris-Confirm": String(confirm) },
+    body: JSON.stringify(event),
+  });
+}
+
+export function googleCalendarDelete(id: string, confirm = false) {
+  return request<{ ok?: boolean }>(`/google/calendar/events/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+    headers: { "X-Iris-Confirm": String(confirm) },
+  });
+}
