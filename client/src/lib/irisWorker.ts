@@ -41,6 +41,26 @@ export function askIrisWorker(message: string, messages?: Array<{ role: string; 
   });
 }
 
+export type IrisDataKind =
+  | "settings"
+  | "radar"
+  | "finances"
+  | "documents"
+  | "conversations";
+
+export type IrisDataRow = Record<string, unknown> & { id?: string };
+
+export async function loadIrisData(kind: IrisDataKind) {
+  return request<{ items: IrisDataRow[] }>(`/data/${kind}`);
+}
+
+export async function saveIrisData(kind: Exclude<IrisDataKind, "conversations">, value: IrisDataRow) {
+  return request<{ ok: boolean; id: string }>(`/data/${kind}`, {
+    method: "POST",
+    body: JSON.stringify(value),
+  });
+}
+
 export type GmailHeader = { name?: string; value?: string };
 export type GmailMessage = {
   id: string;

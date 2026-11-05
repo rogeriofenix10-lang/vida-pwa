@@ -25,6 +25,8 @@ import {
   gmailMessage,
   gmailMessages,
   gmailStatus,
+  loadIrisData,
+  saveIrisData,
 } from "@/lib/irisWorker";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -243,6 +245,33 @@ export default function CommandCenter54() {
       );
     } catch {}
   }, [chat]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void loadIrisData("radar")
+      .then(({ items: rows }) => {
+        if (cancelled || !rows.length) return;
+        const remoteItems: RadarItem[] = rows.map((row, index) => ({
+          id: Number(row.id) || Date.now() + index,
+          label: String(row.label ?? ""),
+          detail: String(row.detail ?? ""),
+          date: row.due_at ? new Date(String(row.due_at)).toLocaleDateString("pt-BR") : "em dia",
+          priority: "normal",
+          action: "Continuar acompanhamento",
+          dueAt: row.due_at ? String(row.due_at) : null,
+          status: row.status === "completed" ? "completed" : "pending",
+          category: (String(row.category ?? "Geral") as RadarCategory),
+        }));
+        setItems(remoteItems);
+        setRadarFallback(false);
+      })
+      .catch(() => {
+        // O modo local continua disponível quando o Worker está indisponível.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const [aiProvider, setAiProvider] = useState<AiProvider>(() => {
     try {
@@ -980,6 +1009,15 @@ export default function CommandCenter54() {
     const item = runDemoCommand(newTaskInput);
     if (item) {
       setItems((curr) => [item, ...curr]);
+      void saveIrisData("radar", {
+        id: String(item.id),
+        label: item.label,
+        detail: item.detail,
+        status: item.status ?? "pending",
+        category: item.category ?? "Geral",
+        due_at: item.dueAt ?? null,
+        payload: { priority: item.priority, action: item.action },
+      }).catch(() => undefined);
     } else {
       const manualItem: RadarItem = {
         id: Date.now(),
@@ -992,6 +1030,14 @@ export default function CommandCenter54() {
         category: "Geral",
       };
       setItems((curr) => [manualItem, ...curr]);
+      void saveIrisData("radar", {
+        id: String(manualItem.id),
+        label: manualItem.label,
+        detail: manualItem.detail,
+        status: manualItem.status ?? "pending",
+        category: manualItem.category ?? "Geral",
+        payload: { priority: manualItem.priority, action: manualItem.action },
+      }).catch(() => undefined);
     }
     setNewTaskInput("");
     setActiveView("radar");
