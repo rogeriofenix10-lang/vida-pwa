@@ -70,6 +70,8 @@ export function useIrisVoice(options: {
   const recognitionRef = useRef<Recognition | null>(null);
   const restartingRef = useRef(false);
   const speakingRef = useRef(false);
+  const fatalErrorRef = useRef(false);
+  const lastFinalRef = useRef({ text: "", at: 0 });
   const conversationRef = useRef(false);
   const conversationTimerRef = useRef<number | null>(null);
 
@@ -166,6 +168,8 @@ export function useIrisVoice(options: {
       return false;
     }
 
+    fatalErrorRef.current = false;
+    restartingRef.current = false;
     let recognition = recognitionRef.current;
     if (!recognition) {
       recognition = getRecognition();
@@ -196,6 +200,11 @@ export function useIrisVoice(options: {
         if (item.isFinal) {
           const transcript = piece.trim();
           if (!transcript || speakingRef.current) continue;
+
+          const now = Date.now();
+          const normalizedFinal = transcript.toLocaleLowerCase("pt-BR").replace(/\s+/g, " ");
+          if (lastFinalRef.current.text === normalizedFinal && now - lastFinalRef.current.at < 2500) continue;
+          lastFinalRef.current = { text: normalizedFinal, at: now };
 
           const normalized = transcript.toLocaleLowerCase("pt-BR");
           const wake = wakeWordRef.current.toLocaleLowerCase("pt-BR");
@@ -244,23 +253,31 @@ export function useIrisVoice(options: {
     recognition.onerror = (event: { error: string }) => {
       const err = event.error;
       if (err === "not-allowed" || err === "service-not-allowed") {
+        fatalErrorRef.current = true;
+        restartingRef.current = true;
         setStatus("permission");
         onErrorRef.current?.("Permissão para usar o microfone não foi concedida.");
       } else if (err === "no-speech") {
         // Pausa momentânea na fala não é erro fatal
       } else if (err === "audio-capture") {
+        fatalErrorRef.current = true;
+        restartingRef.current = true;
         setStatus("error");
         onErrorRef.current?.("Nenhum microfone encontrado ou dispositivo em uso.");
       } else if (err !== "aborted") {
+        if (err === "network") {
+          fatalErrorRef.current = true;
+          restartingRef.current = true;
+        }
         setStatus("error");
         onErrorRef.current?.(`Falha no reconhecimento de voz (${err}).`);
       }
     };
 
     recognition.onend = () => {
-      if (!restartingRef.current && enabledRef.current && !speakingRef.current) {
+      if (!fatalErrorRef.current && !restartingRef.current && enabledRef.current && !speakingRef.current) {
         window.setTimeout(() => {
-          if (!restartingRef.current && enabledRef.current && !speakingRef.current) {
+          if (!fatalErrorRef.current && !restartingRef.current && enabledRef.current && !speakingRef.current) {
             try {
               recognitionRef.current?.start();
               setStatus(conversationRef.current ? "conversation" : "listening");

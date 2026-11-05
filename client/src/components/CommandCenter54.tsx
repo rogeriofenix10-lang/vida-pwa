@@ -236,6 +236,8 @@ export default function CommandCenter54() {
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editText, setEditText] = useState("");
   const [newTaskInput, setNewTaskInput] = useState("");
+  const lastVoiceCommandRef = useRef({ text: "", at: 0 });
+  const lastVoiceErrorRef = useRef({ text: "", at: 0 });
   const { theme, toggleTheme } = useTheme();
 
   useEffect(() => {
@@ -500,11 +502,18 @@ export default function CommandCenter54() {
       }
     },
     onCommand: (command) => {
+      const normalized = command.toLocaleLowerCase("pt-BR").replace(/\s+/g, " ").trim();
+      const now = Date.now();
+      if (lastVoiceCommandRef.current.text === normalized && now - lastVoiceCommandRef.current.at < 2500) return;
+      lastVoiceCommandRef.current = { text: normalized, at: now };
       setIsListening(false);
       setCommandText(command);
       void sendMessage(command);
     },
     onError: (err) => {
+      const now = Date.now();
+      if (lastVoiceErrorRef.current.text === err && now - lastVoiceErrorRef.current.at < 5000) return;
+      lastVoiceErrorRef.current = { text: err, at: now };
       setIsListening(false);
       setChat((current) => [...current, { role: "assistant", text: err }]);
     },
