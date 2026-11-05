@@ -11,7 +11,14 @@ export default function FirstRunGate({
   children: React.ReactNode;
 }) {
   const [completed, setCompleted] = useState(
-    () => localStorage.getItem(FIRST_RUN_KEY) === "1",
+    () => {
+      if (IRIS_STATIC_MODE) {
+        localStorage.setItem(FIRST_RUN_KEY, "1");
+        localStorage.setItem("iris.mode", "demo");
+        return true;
+      }
+      return localStorage.getItem(FIRST_RUN_KEY) === "1";
+    },
   );
   const [mode, setMode] = useState<"demo" | "connected">("demo");
   if (completed) return <>{children}</>;
