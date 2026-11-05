@@ -16,6 +16,16 @@ import {
 } from "@shared/irisCognitive";
 import { useIrisVoice } from "@/hooks/useIrisVoice";
 import { useTheme } from "@/contexts/ThemeContext";
+import { IRIS_STATIC_MODE } from "@/lib/irisRuntime";
+import {
+  askIrisWorker,
+  gmailAuthUrl,
+  gmailBody,
+  gmailHeader,
+  gmailMessage,
+  gmailMessages,
+  gmailStatus,
+} from "@/lib/irisWorker";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -616,6 +626,85 @@ export default function CommandCenter54() {
     }
   };
 
+  const sendStaticWorkerMessage = async (text: string) => {
+    setIrisState("analyzing");
+    setIsProcessing(true);
+    const normalized = text.toLowerCase().trim();
+    try {
+      if (/^(pare|parar|pare de ler|silêncio|silencio|cancele)$/i.test(normalized)) {
+        voice.stop();
+        window.speechSynthesis?.cancel();
+        setIsListening(false);
+        const reply = "Parei a leitura imediatamente.";
+        setChat((current) => [...current, { role: "assistant", text: reply }]);
+        setIrisState("idle");
+        return;
+      }
+
+      const isGmailCommand = /(e-?mail|gmail|remetente|título|titulo)/i.test(text);
+      if (isGmailCommand) {
+        const status = await gmailStatus();
+        if (!status.authorized) {
+          const reply = `O Gmail ainda não está autorizado. Abra este endereço para autorizar somente leitura: ${gmailAuthUrl()}`;
+          setChat((current) => [...current, { role: "assistant", text: reply }]);
+          if (voiceEnabled) voice.speak(reply);
+          return;
+        }
+        const listing = await gmailMessages();
+        const ids = (listing.messages ?? []).slice(0, 20).map((item) => item.id);
+        if (/quantos|quantidade|número|numero/i.test(text)) {
+          const reply = `Você recebeu aproximadamente ${listing.resultSizeEstimate ?? ids.length} e-mails. A consulta atual mostra até ${ids.length} mensagens.`;
+          setChat((current) => [...current, { role: "assistant", text: reply }]);
+          if (voiceEnabled) voice.speak(reply);
+          return;
+        }
+        const details = await Promise.all(ids.map((id) => gmailMessage(id)));
+        const query = text
+          .replace(/.*e-?mail\s*/i, "")
+          .replace(/^(de|do|da|com assunto|sobre)\s+/i, "")
+          .trim();
+        const target = /leia|ler|leitura/i.test(text)
+          ? details.find((message) => {
+              if (!query) return false;
+              const subject = gmailHeader(message, "Subject").toLowerCase();
+              const from = gmailHeader(message, "From").toLowerCase();
+              return subject.includes(query.toLowerCase()) || from.includes(query.toLowerCase());
+            })
+          : null;
+        if (target) {
+          const reply = `Assunto: ${gmailHeader(target, "Subject")}\nRemetente: ${gmailHeader(target, "From")}\n\n${gmailBody(target)}`;
+          setChat((current) => [...current, { role: "assistant", text: reply }]);
+          if (voiceEnabled) voice.speak(reply);
+          return;
+        }
+        const reply = details.length
+          ? details
+              .map((message, index) => `${index + 1}. ${gmailHeader(message, "Subject")} — ${gmailHeader(message, "From")}`)
+              .join("\n")
+          : "Não encontrei e-mails na consulta atual.";
+        setChat((current) => [...current, { role: "assistant", text: reply }]);
+        if (voiceEnabled) voice.speak(reply);
+        return;
+      }
+
+      const result = await askIrisWorker(text);
+      const reply = result.text || "Não recebi uma resposta do Worker.";
+      setChat((current) => [...current, { role: "assistant", text: reply }]);
+      if (voiceEnabled) voice.speak(reply);
+      setIrisState("completed");
+    } catch (error) {
+      const reply = error instanceof Error
+        ? `Não consegui concluir a operação conectada: ${error.message}`
+        : "Não consegui concluir a operação conectada.";
+      setChat((current) => [...current, { role: "assistant", text: reply }]);
+      if (voiceEnabled) voice.speak(reply);
+      setIrisState("error");
+    } finally {
+      setIsProcessing(false);
+      window.setTimeout(() => setIrisState("idle"), 1500);
+    }
+  };
+
   const sendMessage = async (preset?: string) => {
     const text = (preset ?? commandText).trim();
     if (!text && attachments.length === 0) return;
@@ -636,6 +725,11 @@ export default function CommandCenter54() {
 
     // Ao enviar comando, abre automaticamente a visualização do Assistente para leitura
     setActiveView("assistente");
+
+    if (IRIS_STATIC_MODE) {
+      await sendStaticWorkerMessage(text);
+      return;
+    }
 
     // 1. Receber comando do usuário e iniciar análise cognitiva
     setIrisState("analyzing");
