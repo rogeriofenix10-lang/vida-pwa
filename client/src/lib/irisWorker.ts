@@ -61,6 +61,21 @@ export async function saveIrisData(kind: Exclude<IrisDataKind, "conversations">,
   });
 }
 
+export type IrisStorageQuota = {
+  ok: boolean;
+  period: string;
+  limits: { bytes: number; classA: number; classB: number };
+  usage: { bytes: number; classA: number; classB: number };
+  percent: { storage: number; classA: number; classB: number };
+  guardPercent: number;
+  blocked: boolean;
+  warning: string | null;
+};
+
+export function storageQuota() {
+  return request<IrisStorageQuota>("/storage/quota");
+}
+
 export type GmailHeader = { name?: string; value?: string };
 export type GmailMessage = {
   id: string;

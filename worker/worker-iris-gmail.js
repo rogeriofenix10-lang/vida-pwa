@@ -2,6 +2,8 @@ const DEFAULT_MODEL = "gemini-3.5-flash-lite";
 const MAX_PROMPT_LENGTH = 12000;
 const MAX_HISTORY_MESSAGES = 20;
 const GMAIL_SCOPE = "https://www.googleapis.com/auth/gmail.readonly";
+const R2_LIMITS = { bytes: 10 * 1024 * 1024 * 1024, classA: 1000000, classB: 10000000 };
+const R2_GUARD = 0.9;
 const IRIS_SYSTEM_PROMPT = `Você é a Íris, consultora sênior multidisciplinar e assistente em português do Brasil.
 
 Atue com rigor, não invente dados e diferencie fatos, estimativas e opiniões. Especialidades: marketing e inteligência artificial em nível avançado; estratégia, posicionamento, branding, pesquisa, segmentação, funil, conteúdo, mídia, métricas, automação e dados; Excel e Google Sheets, fórmulas, tabelas dinâmicas, validação, dashboards e modelagem; comercial, vendas, canais, precificação, margem e negociação; finanças, economia, administração e projetos; contratos e direito empresarial, civil e tributário, sempre avisando que não substitui advogado ou contador; textos, roteiros, apresentações, imagens, vídeos e áudio; saúde apenas de modo educacional, sem diagnóstico ou prescrição.
@@ -53,6 +55,16 @@ async function dbJson(req, env, kind) {
   return json({ ok: true, id }, 200, req.headers.get("Origin"), env.ALLOWED_ORIGIN);
 }
 
+async function storageQuota(req, env) {
+  if (!env.IRIS_DB) return json({ error: "Banco D1 não vinculado ao Worker." }, 503, req.headers.get("Origin"), env.ALLOWED_ORIGIN);
+  const uid = userId(req, env), period = new Date().toISOString().slice(0, 7);
+  const row = await env.IRIS_DB.prepare("SELECT stored_bytes,class_a,class_b,updated_at FROM iris_storage_usage WHERE user_id = ? AND period = ?").bind(uid, period).first();
+  const usage = { bytes: Number(row?.stored_bytes || 0), classA: Number(row?.class_a || 0), classB: Number(row?.class_b || 0) };
+  const percent = { storage: usage.bytes / R2_LIMITS.bytes, classA: usage.classA / R2_LIMITS.classA, classB: usage.classB / R2_LIMITS.classB };
+  const blocked = Object.values(percent).some(value => value >= R2_GUARD);
+  return json({ ok: true, period, limits: R2_LIMITS, usage, percent, guardPercent: R2_GUARD, blocked, warning: blocked ? "Franquia protegida: novas operações R2 bloqueadas antes do limite gratuito." : null }, 200, req.headers.get("Origin"), env.ALLOWED_ORIGIN);
+}
+
 async function handle(req, env) {
   const o = req.headers.get("Origin"), c = env.ALLOWED_ORIGIN || "";
   if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: cors(o, c) });
@@ -63,10 +75,12 @@ async function handle(req, env) {
   if (url.pathname === "/gmail/messages") return gmail(req, env, "messages?maxResults=20");
   if (url.pathname === "/gmail/message") { const id = url.searchParams.get("id"); if (!id) return json({ error: "Informe id." }, 400, o, c); return gmail(req, env, "messages/" + encodeURIComponent(id) + "?format=full"); }
   if (url.pathname === "/db/health") return json({ ok: !!env.IRIS_DB, database: env.IRIS_DB ? "d1" : "missing" }, env.IRIS_DB ? 200 : 503, o, c);
+  if (url.pathname === "/storage/quota") return storageQuota(req, env);
   const dataMatch = url.pathname.match(/^\/data\/(settings|radar|finances|documents|conversations)$/); if (dataMatch) return dbJson(req, env, dataMatch[1]);
   if (req.method === "GET") return json({ ok: true, service: "iris-gemini-proxy", model: env.GEMINI_MODEL || DEFAULT_MODEL }, 200, o, c);
   if (req.method !== "POST") return json({ error: "Use POST." }, 405, o, c);
   let body; try { body = await req.json(); } catch { return json({ error: "JSON inválido." }, 400, o, c); }
+  if (/\b(r2|franquia|armazenamento|limite)\b/i.test(String(body?.message || body?.prompt || ""))) return storageQuota(req, env);
   const raw = body?.message ?? body?.prompt ?? "", message = typeof raw === "string" ? raw.trim() : ""; if (!message && !(Array.isArray(body?.messages) && body.messages.length)) return json({ error: "Mensagem não informada." }, 400, o, c); if (message.length > MAX_PROMPT_LENGTH) return json({ error: "Mensagem excede o limite de 12000 caracteres." }, 413, o, c); if (!env.GEMINI_API_KEY) return json({ error: "Chave da API do Gemini não configurada." }, 500, o, c); const contents = Array.isArray(body?.messages) && body.messages.length ? body.messages.slice(-MAX_HISTORY_MESSAGES).map(x => ({ role: x.role === "model" ? "model" : "user", parts: [{ text: String(x.text ?? x.content ?? "").slice(0, MAX_PROMPT_LENGTH) }] })).filter(x => x.parts[0].text) : [{ role: "user", parts: [{ text: message }] }]; const model = env.GEMINI_MODEL || DEFAULT_MODEL; const result = await gemini(model, env.GEMINI_API_KEY, { system_instruction: { parts: [{ text: IRIS_SYSTEM_PROMPT }] }, contents }); if (result?.r?.ok) return json({ text: result.d?.candidates?.[0]?.content?.parts?.map(x => x.text || "").join("").trim() || "Sem resposta gerada.", model }, 200, o, c); return json({ error: "Gemini HTTP " + (result?.r?.status || 503) + ".", details: result?.d?.error?.message || "Falha temporária após novas tentativas." }, result?.r?.status || 503, o, c);
 }
 export default { fetch: (req, env) => handle(req, env) };
