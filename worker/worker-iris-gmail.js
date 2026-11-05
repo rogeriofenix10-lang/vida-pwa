@@ -95,7 +95,7 @@ async function storageUpload(req, env) {
   if (req.method !== "POST") return json({ error: "Use POST." }, 405, req.headers.get("Origin"), env.ALLOWED_ORIGIN);
   const uid = userId(req, env), period = new Date().toISOString().slice(0, 7), usage = await env.IRIS_DB.prepare("SELECT stored_bytes,class_a FROM iris_storage_usage WHERE user_id=? AND period=?").bind(uid, period).first();
   const form = await req.formData(), file = form.get("file");
-  if (!(file instanceof File)) return json({ error: "Envie o campo file." }, 400, req.headers.get("Origin"), env.ALLOWED_ORIGIN);
+  if (!file || typeof file.stream !== "function") return json({ error: "Envie o campo file." }, 400, req.headers.get("Origin"), env.ALLOWED_ORIGIN);
   const size = Number(file.size || 0); if (Number(usage?.stored_bytes || 0) + size >= R2_LIMITS.bytes * R2_GUARD || Number(usage?.class_a || 0) + 1 >= R2_LIMITS.classA * R2_GUARD) return json({ error: "Franquia protegida em 98%. Upload bloqueado." }, 429, req.headers.get("Origin"), env.ALLOWED_ORIGIN);
   const id = String(form.get("id") || crypto.randomUUID()), key = `${uid}/${id}/${String(file.name || "arquivo").replace(/[^a-zA-Z0-9._-]/g, "_")}`;
   await env.IRIS_FILES.put(key, file.stream(), { httpMetadata: { contentType: file.type || "application/octet-stream" } });
