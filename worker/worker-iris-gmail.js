@@ -65,6 +65,47 @@ async function storageQuota(req, env) {
   return json({ ok: true, period, limits: R2_LIMITS, usage, percent, guardPercent: R2_GUARD, blocked, warning: blocked ? "Franquia protegida: novas operações R2 bloqueadas antes do limite gratuito." : null }, 200, req.headers.get("Origin"), env.ALLOWED_ORIGIN);
 }
 
+async function storageFile(req, env, id) {
+  if (!env.IRIS_DB || !env.IRIS_FILES) return json({ error: "Armazenamento R2 não vinculado ao Worker." }, 503, req.headers.get("Origin"), env.ALLOWED_ORIGIN);
+  const uid = userId(req, env), period = new Date().toISOString().slice(0, 7);
+  const row = await env.IRIS_DB.prepare("SELECT id,name,mime_type,storage_key,payload FROM iris_documents WHERE id=? AND user_id=?").bind(id, uid).first();
+  if (!row?.storage_key) return json({ error: "Arquivo não encontrado." }, 404, req.headers.get("Origin"), env.ALLOWED_ORIGIN);
+  if (req.method === "GET") {
+    const usage = await env.IRIS_DB.prepare("SELECT class_b FROM iris_storage_usage WHERE user_id=? AND period=?").bind(uid, period).first();
+    if (Number(usage?.class_b || 0) + 1 >= R2_LIMITS.classB * R2_GUARD) return json({ error: "Franquia de leituras protegida em 98%." }, 429, req.headers.get("Origin"), env.ALLOWED_ORIGIN);
+    const object = await env.IRIS_FILES.get(row.storage_key);
+    if (!object) return json({ error: "Objeto não encontrado no R2." }, 404, req.headers.get("Origin"), env.ALLOWED_ORIGIN);
+    await env.IRIS_DB.prepare("INSERT INTO iris_storage_usage(user_id,period,class_b,updated_at) VALUES(?,?,1,CURRENT_TIMESTAMP) ON CONFLICT(user_id,period) DO UPDATE SET class_b=class_b+1,updated_at=CURRENT_TIMESTAMP").bind(uid, period).run();
+    const headers = new Headers(cors(req.headers.get("Origin"), env.ALLOWED_ORIGIN)); headers.set("Content-Type", row.mime_type || object.httpMetadata?.contentType || "application/octet-stream"); headers.set("Content-Length", String(object.size)); headers.set("Content-Disposition", `inline; filename="${String(row.name || "arquivo").replace(/["\r\n]/g, "")}"`);
+    return new Response(object.body, { status: 200, headers });
+  }
+  if (req.method === "DELETE") {
+    await env.IRIS_FILES.delete(row.storage_key);
+    await env.IRIS_DB.batch([
+      env.IRIS_DB.prepare("DELETE FROM iris_documents WHERE id=? AND user_id=?").bind(id, uid),
+      env.IRIS_DB.prepare("INSERT INTO iris_storage_usage(user_id,period,stored_bytes,updated_at) VALUES(?,?,0,CURRENT_TIMESTAMP) ON CONFLICT(user_id,period) DO UPDATE SET stored_bytes=MAX(0,stored_bytes-?),updated_at=CURRENT_TIMESTAMP").bind(uid, period, Number(row.payload ? JSON.parse(row.payload).size || 0 : 0)),
+    ]);
+    return json({ ok: true, id }, 200, req.headers.get("Origin"), env.ALLOWED_ORIGIN);
+  }
+  return json({ error: "Método não permitido." }, 405, req.headers.get("Origin"), env.ALLOWED_ORIGIN);
+}
+
+async function storageUpload(req, env) {
+  if (!env.IRIS_DB || !env.IRIS_FILES) return json({ error: "Armazenamento R2 não vinculado ao Worker." }, 503, req.headers.get("Origin"), env.ALLOWED_ORIGIN);
+  if (req.method !== "POST") return json({ error: "Use POST." }, 405, req.headers.get("Origin"), env.ALLOWED_ORIGIN);
+  const uid = userId(req, env), period = new Date().toISOString().slice(0, 7), usage = await env.IRIS_DB.prepare("SELECT stored_bytes,class_a FROM iris_storage_usage WHERE user_id=? AND period=?").bind(uid, period).first();
+  const form = await req.formData(), file = form.get("file");
+  if (!(file instanceof File)) return json({ error: "Envie o campo file." }, 400, req.headers.get("Origin"), env.ALLOWED_ORIGIN);
+  const size = Number(file.size || 0); if (Number(usage?.stored_bytes || 0) + size >= R2_LIMITS.bytes * R2_GUARD || Number(usage?.class_a || 0) + 1 >= R2_LIMITS.classA * R2_GUARD) return json({ error: "Franquia protegida em 98%. Upload bloqueado." }, 429, req.headers.get("Origin"), env.ALLOWED_ORIGIN);
+  const id = String(form.get("id") || crypto.randomUUID()), key = `${uid}/${id}/${String(file.name || "arquivo").replace(/[^a-zA-Z0-9._-]/g, "_")}`;
+  await env.IRIS_FILES.put(key, file.stream(), { httpMetadata: { contentType: file.type || "application/octet-stream" } });
+  await env.IRIS_DB.batch([
+    env.IRIS_DB.prepare("INSERT OR REPLACE INTO iris_documents(id,user_id,name,mime_type,storage_key,payload) VALUES(?,?,?,?,?,?)").bind(id, uid, String(file.name || "arquivo"), file.type || "application/octet-stream", key, JSON.stringify({ size, storedAt: new Date().toISOString() })),
+    env.IRIS_DB.prepare("INSERT INTO iris_storage_usage(user_id,period,stored_bytes,class_a,updated_at) VALUES(?,?,?,1,CURRENT_TIMESTAMP) ON CONFLICT(user_id,period) DO UPDATE SET stored_bytes=stored_bytes+?,class_a=class_a+1,updated_at=CURRENT_TIMESTAMP").bind(uid, period, size, size),
+  ]);
+  return json({ ok: true, id, key, name: file.name, size }, 201, req.headers.get("Origin"), env.ALLOWED_ORIGIN);
+}
+
 async function handle(req, env) {
   const o = req.headers.get("Origin"), c = env.ALLOWED_ORIGIN || "";
   if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: cors(o, c) });
@@ -76,6 +117,8 @@ async function handle(req, env) {
   if (url.pathname === "/gmail/message") { const id = url.searchParams.get("id"); if (!id) return json({ error: "Informe id." }, 400, o, c); return gmail(req, env, "messages/" + encodeURIComponent(id) + "?format=full"); }
   if (url.pathname === "/db/health") return json({ ok: !!env.IRIS_DB, database: env.IRIS_DB ? "d1" : "missing" }, env.IRIS_DB ? 200 : 503, o, c);
   if (url.pathname === "/storage/quota") return storageQuota(req, env);
+  if (url.pathname === "/storage/upload") return storageUpload(req, env);
+  const storageMatch = url.pathname.match(/^\/storage\/file\/([^/]+)$/); if (storageMatch) return storageFile(req, env, decodeURIComponent(storageMatch[1]));
   const dataMatch = url.pathname.match(/^\/data\/(settings|radar|finances|documents|conversations)$/); if (dataMatch) return dbJson(req, env, dataMatch[1]);
   if (req.method === "GET") return json({ ok: true, service: "iris-gemini-proxy", model: env.GEMINI_MODEL || DEFAULT_MODEL }, 200, o, c);
   if (req.method !== "POST") return json({ error: "Use POST." }, 405, o, c);
