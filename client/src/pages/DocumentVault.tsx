@@ -16,6 +16,7 @@ import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { readLocal, writeLocal } from "@/lib/irisLocalStore";
 import { runLocalOcr } from "@/lib/localOcr";
+import { loadIrisData, saveIrisData } from "@/lib/irisWorker";
 import "./document-vault.css";
 
 type Kind = "saude" | "financeiro" | "geral";
@@ -147,11 +148,55 @@ export default function DocumentVault() {
   const [message, setMessage] = useState("");
   const [ocrId, setOcrId] = useState<string | null>(null);
   useEffect(() => {
-    void readLocal<DocumentRecord[]>("irisDocuments", []).then(setItems);
+    void readLocal<DocumentRecord[]>("irisDocuments", []).then((local) => {
+      setItems(local);
+      void loadIrisData("documents").then(({ items: rows }) => {
+        if (!rows.length) return;
+        const remote = rows.map((row) => {
+          const payload = (row.payload ?? {}) as Partial<DocumentRecord>;
+          return {
+            ...payload,
+            id: String(row.id ?? payload.id ?? crypto.randomUUID()),
+            name: String(row.name ?? payload.name ?? "Documento"),
+            mime: String(row.mime_type ?? payload.mime ?? "application/octet-stream"),
+            size: Number(payload.size ?? 0),
+            folder: String(payload.folder ?? "Documentos"),
+            kind: (payload.kind ?? "geral") as Kind,
+            createdAt: String(payload.createdAt ?? row.created_at ?? new Date().toISOString()),
+            extractedText: String(payload.extractedText ?? ""),
+            analysis: (payload.analysis ?? "arquivado · formato não textual") as DocumentRecord["analysis"],
+            money: Array.isArray(payload.money) ? payload.money : [],
+            markers: payload.markers ?? {},
+          } as DocumentRecord;
+        });
+        setItems(remote);
+      }).catch(() => undefined);
+    });
   }, []);
   const save = async (next: DocumentRecord[]) => {
     setItems(next);
     await writeLocal("irisDocuments", next);
+    await Promise.all(
+      next.map(async (item) => {
+        const { blob: _blob, ...payload } = item;
+        await saveIrisData("documents", {
+          id: item.id,
+          name: item.name,
+          mime_type: item.mime,
+          payload,
+        }).catch(() => undefined);
+        if (item.kind === "financeiro") {
+          await saveIrisData("finances", {
+            id: item.id,
+            type: "document",
+            description: item.name,
+            amount_cents: Math.round((item.total ?? moneyTotal([item])) * 100),
+            status: item.reviewStatus === "confirmed" ? "confirmed" : "open",
+            payload: { money: item.money, createdAt: item.createdAt },
+          }).catch(() => undefined);
+        }
+      }),
+    );
   };
   const ingest = async (files: FileList | null) => {
     if (!files) return;
