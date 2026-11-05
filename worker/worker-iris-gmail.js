@@ -104,11 +104,20 @@ async function storageUpload(req, env) {
   const size = Number(data.byteLength || 0); if (!size) return json({ error: "Arquivo vazio." }, 400, req.headers.get("Origin"), env.ALLOWED_ORIGIN);
   if (Number(usage?.stored_bytes || 0) + size >= R2_LIMITS.bytes * R2_GUARD || Number(usage?.class_a || 0) + 1 >= R2_LIMITS.classA * R2_GUARD) return json({ error: "Franquia protegida em 98%. Upload bloqueado." }, 429, req.headers.get("Origin"), env.ALLOWED_ORIGIN);
   const key = `${uid}/${id}/${name.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
-  await env.IRIS_FILES.put(key, data, { httpMetadata: { contentType: mime } });
-  await env.IRIS_DB.batch([
-    env.IRIS_DB.prepare("INSERT OR REPLACE INTO iris_documents(id,user_id,name,mime_type,storage_key,payload) VALUES(?,?,?,?,?,?)").bind(id, uid, name, mime, key, JSON.stringify({ size, storedAt: new Date().toISOString() })),
-    env.IRIS_DB.prepare("INSERT INTO iris_storage_usage(user_id,period,stored_bytes,class_a,updated_at) VALUES(?,?,?,1,CURRENT_TIMESTAMP) ON CONFLICT(user_id,period) DO UPDATE SET stored_bytes=stored_bytes+?,class_a=class_a+1,updated_at=CURRENT_TIMESTAMP").bind(uid, period, size, size),
-  ]);
+  try {
+    await env.IRIS_FILES.put(key, data, { httpMetadata: { contentType: mime } });
+  } catch (error) {
+    return json({ error: "R2.put falhou", detail: String(error?.message || error) }, 502, req.headers.get("Origin"), env.ALLOWED_ORIGIN);
+  }
+  try {
+    await env.IRIS_DB.batch([
+      env.IRIS_DB.prepare("INSERT OR REPLACE INTO iris_documents(id,user_id,name,mime_type,storage_key,payload) VALUES(?,?,?,?,?,?)").bind(id, uid, name, mime, key, JSON.stringify({ size, storedAt: new Date().toISOString() })),
+      env.IRIS_DB.prepare("INSERT INTO iris_storage_usage(user_id,period,stored_bytes,class_a,updated_at) VALUES(?,?,?,1,CURRENT_TIMESTAMP) ON CONFLICT(user_id,period) DO UPDATE SET stored_bytes=stored_bytes+?,class_a=class_a+1,updated_at=CURRENT_TIMESTAMP").bind(uid, period, size, size),
+    ]);
+  } catch (error) {
+    try { await env.IRIS_FILES.delete(key); } catch {}
+    return json({ error: "D1.batch falhou", detail: String(error?.message || error) }, 502, req.headers.get("Origin"), env.ALLOWED_ORIGIN);
+  }
   return json({ ok: true, id, key, name, size }, 201, req.headers.get("Origin"), env.ALLOWED_ORIGIN);
 }
 
