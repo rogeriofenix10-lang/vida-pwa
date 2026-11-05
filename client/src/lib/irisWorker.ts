@@ -41,6 +41,20 @@ export function askIrisWorker(message: string, messages?: Array<{ role: string; 
   });
 }
 
+export type IrisAdvancedMode = "vision" | "translate" | "compare" | "spreadsheet" | "document";
+
+export async function askIrisAdvanced(input: {
+  mode: IrisAdvancedMode;
+  text?: string;
+  imageBase64?: string;
+  mimeType?: string;
+}) {
+  return request<WorkerResponse & { mode: IrisAdvancedMode }>("/", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
 export type IrisDataKind =
   | "settings"
   | "radar"

@@ -29,6 +29,25 @@ async function gmail(req, env, path) { const token = await gmailToken(req, env);
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 async function gemini(model, key, payload) { const url = "https://generativelanguage.googleapis.com/v1beta/models/" + encodeURIComponent(model) + ":generateContent?key=" + encodeURIComponent(key); let last; for (let i = 0; i < 3; i++) { try { const r = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) }); const d = await r.json(); if (r.ok) return { r, d }; last = { r, d }; if (![408, 429, 500, 502, 503, 504].includes(r.status)) return last; if (i < 2) await sleep(1000 * 2 ** i); } catch (e) { last = { e }; if (i < 2) await sleep(1000 * 2 ** i); } } return last; }
 
+async function advancedGemini(body, env) {
+  const mode = String(body?.mode || "");
+  const text = String(body?.text || body?.message || "").slice(0, MAX_PROMPT_LENGTH);
+  const image = body?.imageBase64 && body?.mimeType ? { inline_data: { mime_type: String(body.mimeType), data: String(body.imageBase64).replace(/^data:[^,]+,/, "").slice(0, 8000000) } } : null;
+  const instructions = {
+    vision: "Interprete a imagem com precisão. Descreva somente o que é observável e separe leitura, inferência e incerteza.",
+    translate: "Traduza o conteúdo mantendo sentido, estrutura e números. Não resuma.",
+    compare: "Compare os dois textos/documentos fornecidos, destaque diferenças, riscos, valores e itens ausentes. Não invente dados.",
+    spreadsheet: "Transforme os dados em uma estrutura de planilha empresarial. Responda em JSON válido com columns, rows e formulas.",
+    document: "Produza um documento empresarial claro, com título, resumo, seções e próximos passos. Responda em JSON com title, sections e notes."
+  };
+  if (!(mode in instructions)) return null;
+  const prompt = `${instructions[mode]}\n${text}`.trim();
+  const parts = [{ text: prompt }]; if (image) parts.push(image);
+  const result = await gemini(env.GEMINI_MODEL || DEFAULT_MODEL, env.GEMINI_API_KEY, { system_instruction: { parts: [{ text: IRIS_SYSTEM_PROMPT }] }, contents: [{ role: "user", parts }] });
+  if (result?.r?.ok) return json({ text: result.d?.candidates?.[0]?.content?.parts?.map(x => x.text || "").join("").trim() || "Sem resposta gerada.", model: env.GEMINI_MODEL || DEFAULT_MODEL, mode }, 200, null, env.ALLOWED_ORIGIN);
+  return json({ error: "Gemini HTTP " + (result?.r?.status || 503) + ".", details: result?.d?.error?.message || "Falha temporária após novas tentativas." }, result?.r?.status || 503, null, env.ALLOWED_ORIGIN);
+}
+
 function userId(req, env) { return req.headers.get("X-Iris-User") || env.IRIS_USER_ID || "owner"; }
 async function dbJson(req, env, kind) {
   if (!env.IRIS_DB) return json({ error: "Banco D1 não vinculado ao Worker." }, 503, req.headers.get("Origin"), env.ALLOWED_ORIGIN);
@@ -144,6 +163,7 @@ async function handle(req, env) {
   if (req.method === "GET") return json({ ok: true, service: "iris-gemini-proxy", model: env.GEMINI_MODEL || DEFAULT_MODEL }, 200, o, c);
   if (req.method !== "POST") return json({ error: "Use POST." }, 405, o, c);
   let body; try { body = await req.json(); } catch { return json({ error: "JSON inválido." }, 400, o, c); }
+  if (body?.mode) { const advanced = await advancedGemini(body, env); if (advanced) return advanced; }
   if (/\b(r2|franquia|armazenamento|limite)\b/i.test(String(body?.message || body?.prompt || ""))) return storageQuota(req, env);
   const raw = body?.message ?? body?.prompt ?? "", message = typeof raw === "string" ? raw.trim() : ""; if (!message && !(Array.isArray(body?.messages) && body.messages.length)) return json({ error: "Mensagem não informada." }, 400, o, c); if (message.length > MAX_PROMPT_LENGTH) return json({ error: "Mensagem excede o limite de 12000 caracteres." }, 413, o, c); if (!env.GEMINI_API_KEY) return json({ error: "Chave da API do Gemini não configurada." }, 500, o, c); const contents = Array.isArray(body?.messages) && body.messages.length ? body.messages.slice(-MAX_HISTORY_MESSAGES).map(x => ({ role: x.role === "model" ? "model" : "user", parts: [{ text: String(x.text ?? x.content ?? "").slice(0, MAX_PROMPT_LENGTH) }] })).filter(x => x.parts[0].text) : [{ role: "user", parts: [{ text: message }] }]; const model = env.GEMINI_MODEL || DEFAULT_MODEL; const result = await gemini(model, env.GEMINI_API_KEY, { system_instruction: { parts: [{ text: IRIS_SYSTEM_PROMPT }] }, contents }); if (result?.r?.ok) return json({ text: result.d?.candidates?.[0]?.content?.parts?.map(x => x.text || "").join("").trim() || "Sem resposta gerada.", model }, 200, o, c); return json({ error: "Gemini HTTP " + (result?.r?.status || 503) + ".", details: result?.d?.error?.message || "Falha temporária após novas tentativas." }, result?.r?.status || 503, o, c);
 }

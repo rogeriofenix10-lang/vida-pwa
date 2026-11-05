@@ -19,6 +19,7 @@ import { useTheme } from "@/contexts/ThemeContext";
 import { IRIS_STATIC_MODE } from "@/lib/irisRuntime";
 import {
   askIrisWorker,
+  askIrisAdvanced,
   gmailAuthUrl,
   gmailBody,
   gmailHeader,
@@ -756,6 +757,20 @@ export default function CommandCenter54() {
     setActiveView("assistente");
 
     if (IRIS_STATIC_MODE) {
+      const imageAttachment = selectedAttachments.find((att) => att.kind === "image_url");
+      if (imageAttachment) {
+        try {
+          const result = await askIrisAdvanced({ mode: "vision", text, imageBase64: imageAttachment.dataUrl, mimeType: imageAttachment.mimeType });
+          const reply = result.text || "Não consegui interpretar a imagem.";
+          setChat((current) => [...current, { role: "assistant", text: reply }]);
+          if (voiceEnabled) voice.speak(reply);
+        } catch (error) {
+          const reply = error instanceof Error ? `Não consegui analisar a imagem: ${error.message}` : "Não consegui analisar a imagem.";
+          setChat((current) => [...current, { role: "assistant", text: reply }]);
+          if (voiceEnabled) voice.speak(reply);
+        }
+        return;
+      }
       await sendStaticWorkerMessage(text);
       return;
     }

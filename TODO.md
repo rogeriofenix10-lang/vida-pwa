@@ -10,9 +10,10 @@
 - [x] Validação TypeScript, build e testes.
 
 # Fase autorizada — persistência e IA conectada
-- [ ] Criar tabelas D1 para memória autorizada, tarefas sincronizadas e cadastro comercial.
-- [ ] Expor GET/POST dessas entidades no Worker, preservando o fallback local.
-- [ ] Ligar os clientes Pages às rotas D1 sem usar `/api/trpc`.
-- [ ] Expandir o Worker para visão, tradução, comparação documental e geração estruturada.
+- [x] Criar tabelas D1 para memória autorizada, tarefas sincronizadas e cadastro comercial.
+- [x] Expor GET/POST dessas entidades no código do Worker, preservando o fallback local.
+- [x] Ligar os clientes Pages às rotas D1 sem usar `/api/trpc`.
+- [ ] Publicar no Worker de produção as rotas D1 e os modos avançados; o código está versionado, mas o upload multipart foi bloqueado pelo executor Cloudflare.
+- [x] Expandir o código do Worker para visão, tradução, comparação documental e geração estruturada.
 - [ ] Preparar Drive e Calendar com escopos OAuth e aprovação para escrita.
 - [ ] Manter redes sociais, Outlook, Waze e reservas bloqueados até credenciais próprias.
