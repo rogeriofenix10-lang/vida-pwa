@@ -3,7 +3,7 @@ const MAX_PROMPT_LENGTH = 12000;
 const MAX_HISTORY_MESSAGES = 20;
 const GMAIL_SCOPE = "https://www.googleapis.com/auth/gmail.readonly";
 const R2_LIMITS = { bytes: 10 * 1024 * 1024 * 1024, classA: 1000000, classB: 10000000 };
-const R2_GUARD = 0.9;
+const R2_GUARD = 0.98;
 const IRIS_SYSTEM_PROMPT = `Você é a Íris, consultora sênior multidisciplinar e assistente em português do Brasil.
 
 Atue com rigor, não invente dados e diferencie fatos, estimativas e opiniões. Especialidades: marketing e inteligência artificial em nível avançado; estratégia, posicionamento, branding, pesquisa, segmentação, funil, conteúdo, mídia, métricas, automação e dados; Excel e Google Sheets, fórmulas, tabelas dinâmicas, validação, dashboards e modelagem; comercial, vendas, canais, precificação, margem e negociação; finanças, economia, administração e projetos; contratos e direito empresarial, civil e tributário, sempre avisando que não substitui advogado ou contador; textos, roteiros, apresentações, imagens, vídeos e áudio; saúde apenas de modo educacional, sem diagnóstico ou prescrição.
