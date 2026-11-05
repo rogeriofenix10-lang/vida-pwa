@@ -49,6 +49,7 @@ import {
   CheckCircle2,
   HeartPulse,
   Menu,
+  WalletCards,
 } from "lucide-react";
 import IrisOcularEye from "./IrisOcularEye";
 import IrisHealthCenter from "./IrisHealthCenter";
@@ -996,7 +997,7 @@ export default function CommandCenter54() {
             </button>
           </div>
 
-          {/* NAVEGAÇÃO INFERIOR / OS SEIS BOTÕES PRINCIPAIS */}
+          {/* NAVEGAÇÃO INFERIOR / BOTÕES PRINCIPAIS */}
           <nav className="iris54-quick-nav">
             <button
               type="button"
@@ -1017,9 +1018,9 @@ export default function CommandCenter54() {
               onClick={() => setActiveView("radar")}
             >
               <span className="icon">
-                <Layers size={17} />
+                <WalletCards size={17} />
               </span>
-              Tarefas
+              Finanças
             </button>
 
             <button
@@ -1064,17 +1065,6 @@ export default function CommandCenter54() {
                 <Wrench size={17} />
               </span>
               Ferramentas
-            </button>
-
-            <button
-              type="button"
-              className={`iris54-quick-btn ${activeView === "saude" ? "active" : ""}`}
-              onClick={() => setActiveView("saude")}
-            >
-              <span className="icon">
-                <HeartPulse size={17} />
-              </span>
-              Saúde
             </button>
 
             <button
