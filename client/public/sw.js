@@ -1,5 +1,5 @@
 // Iris PWA — cache local básico; APIs e ações externas nunca são interceptadas.
-const CACHE_NAME = "iris-pwa-v2";
+const CACHE_NAME = "iris-pwa-v3-ocr-finance";
 const APP_SHELL = ["/", "/manifest.webmanifest", "/iris.svg"];
 
 self.addEventListener("install", (event) => {
