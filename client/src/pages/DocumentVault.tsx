@@ -75,9 +75,14 @@ const categories: [Category, RegExp][] = [
 
 function parseMoney(value: string) {
   const result: Money[] = [];
-  const pattern = /(?:R\$\s*|BRL\s*)([\d.]+,[\d]{2})/gi;
+  const pattern = /(?:R\$|BRL)?\s*(-?(?:\d{1,3}(?:\.\d{3})*,\d{2}|\d+,\d{2}|\d{1,3}(?:,\d{3})*\.\d{2}))/gi;
   for (const match of value.matchAll(pattern)) {
-    const amount = Number(match[1].replace(/\./g, "").replace(",", "."));
+    const raw = match[1];
+    const amount = raw.includes(",") && raw.includes(".")
+      ? Number(raw.replace(/\./g, "").replace(",", "."))
+      : raw.includes(",")
+        ? Number(raw.replace(/\./g, "").replace(",", "."))
+        : Number(raw.replace(/,/g, ""));
     if (Number.isFinite(amount)) {
       const line = value.slice(
         Math.max(0, (match.index ?? 0) - 100),
@@ -147,6 +152,7 @@ export default function DocumentVault() {
             name: String(row.name ?? payload.name ?? "Documento"),
             mime: String(row.mime_type ?? payload.mime ?? "application/octet-stream"),
             size: Number(payload.size ?? 0),
+            storageKey: row.storage_key ? String(row.storage_key) : payload.storageKey,
             folder: String(payload.folder ?? "Documentos"),
             kind: (payload.kind ?? "geral") as Kind,
             createdAt: String(payload.createdAt ?? row.created_at ?? new Date().toISOString()),
@@ -276,14 +282,15 @@ export default function DocumentVault() {
       ),
     );
   const runOcr = async (item: DocumentRecord) => {
-    if (!item.blob) {
-      setMessage("O arquivo original não está disponível para OCR local.");
-      return;
-    }
     setOcrId(item.id);
     setMessage("OCR local em andamento. O arquivo não será enviado.");
     try {
-      const text = await runLocalOcr(item.blob, ({ progress }) => {
+      const source = item.blob ?? (item.storageKey ? await downloadIrisFile(item.id) : null);
+      if (!source) {
+        setMessage("O arquivo original não está disponível para OCR local.");
+        return;
+      }
+      const text = await runLocalOcr(source, ({ progress }) => {
         setMessage(
           `OCR local: ${Math.round(progress * 100)}%. Nenhum envio externo.`,
         );
@@ -295,7 +302,7 @@ export default function DocumentVault() {
               extractedText: text,
               analysis: text ? ("texto extraído" as const) : current.analysis,
               kind: classify(
-                new File([item.blob!], item.name, { type: item.mime }),
+                new File([source], item.name, { type: item.mime }),
                 text,
               ),
               money: parseMoney(text),

@@ -11,7 +11,18 @@ type Entry = { id: string; type: "income" | "expense"; description: string; amou
 const empty = { type: "expense" as Entry["type"], description: "", amount: "", status: "open" as Entry["status"], dueAt: "" };
 const money = (value: number) => value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 const categories: [string, RegExp][] = [["Hotel", /hotel|hosped|pousada|booking|airbnb/i], ["Supermercado", /supermerc|carrefour|atacad|mercado/i], ["Restaurante", /restaurante|lanch|ifood|outback/i], ["Transporte", /uber|99\b|taxi|ped[aá]gio|estacion/i], ["Posto de combustível", /posto|gasolin|shell|ipiranga/i], ["Farmácia", /farm[aá]cia|droga/i], ["Serviços", /internet|telefone|energia|seguro/i]];
-function parseText(file: File, text: string) { const pattern = /(?:R\$\s*|BRL\s*)([\d.]+,[\d]{2})/gi; return [...text.matchAll(pattern)].map((match, index) => { const amount = Number(match[1].replace(/\./g, "").replace(",", ".")); const source = text.slice(Math.max(0, (match.index ?? 0) - 70), (match.index ?? 0) + 100).replace(/\s+/g, " ").trim(); const category = categories.find(([, rule]) => rule.test(source))?.[0] ?? "Outros"; return { id: crypto.randomUUID(), type: "expense" as const, description: `${category} · ${source.slice(0, 90)}`, amount, status: "open" as const, dueAt: "", createdAt: new Date().toISOString(), category, source: file.name }; }).filter((entry) => Number.isFinite(entry.amount) && entry.amount > 0); }
+function parseAmount(raw: string) { const value = raw.trim(); if (value.includes(",") && value.includes(".")) return Number(value.replace(/\./g, "").replace(",", ".")); if (value.includes(",")) return Number(value.replace(/\./g, "").replace(",", ".")); return Number(value.replace(/,/g, "")); }
+function parseText(file: File, text: string) {
+  const amountPattern = /(?:R\$|BRL)?\s*(-?(?:\d{1,3}(?:\.\d{3})*,\d{2}|\d+,\d{2}|\d{1,3}(?:,\d{3})*\.\d{2}))/gi;
+  const rows = text.split(/\r?\n/).map((line) => line.replace(/\s+/g, " ").trim()).filter(Boolean);
+  return rows.flatMap((source) => {
+    const match = source.match(amountPattern);
+    if (!match) return [];
+    const amount = parseAmount(match[1]);
+    const category = categories.find(([, rule]) => rule.test(source))?.[0] ?? "Outros";
+    return Number.isFinite(amount) && amount > 0 ? [{ id: crypto.randomUUID(), type: "expense" as const, description: `${category} · ${source.slice(0, 120)}`, amount, status: "open" as const, dueAt: "", createdAt: new Date().toISOString(), category, source: file.name }] : [];
+  });
+}
 
 export default function FinanceHub() {
   const [items, setItems] = useState<Entry[]>([]); const [draft, setDraft] = useState(empty); const [message, setMessage] = useState(""); const [busy, setBusy] = useState(false);
@@ -23,7 +34,7 @@ export default function FinanceHub() {
   const remove = async (id: string) => { if (!window.confirm("Excluir este lançamento local?")) return; const next = items.filter((item) => item.id !== id); setItems(next); await writeLocal("irisFinances", next); setMessage("Lançamento removido deste dispositivo."); };
   const totals = useMemo(() => items.reduce((acc, item) => { acc[item.type] += item.amount; return acc; }, { income: 0, expense: 0 }), [items]);
   const overdue = items.filter((item) => item.status === "overdue" || (item.dueAt && item.dueAt < new Date().toISOString().slice(0, 10) && item.status === "open"));
-  const importButton = (type: Entry["type"], label: string) => <label className="finance-import-button"><Upload size={18} /> {label}<input type="file" hidden accept=".pdf,.jpg,.jpeg,.png,.csv,.txt,.json" disabled={busy} onChange={(event) => { const file = event.target.files?.[0]; if (file) void importFile(file, type); event.currentTarget.value = ""; }} /></label>;
+  const importButton = (type: Entry["type"], label: string) => <label className="finance-import-button"><Upload size={18} /> {label}<input type="file" hidden accept=".pdf,.jpg,.jpeg,.png,.csv,.txt,.json,.xls,.xlsx,.ods" disabled={busy} onChange={(event) => { const file = event.target.files?.[0]; if (file) void importFile(file, type); event.currentTarget.value = ""; }} /></label>;
   return <main className="finance-page"><div className="finance-shell"><Link href="/" className="finance-back"><ArrowLeft size={20} /> Voltar ao Radar</Link><div className="finance-hero"><div className="finance-eyebrow">IRIS FINANÇAS · LOCAL-FIRST</div><h1>Contas sob controle</h1><p>Importe documentos, separe lançamentos e revise contas a pagar e a receber sem envio automático.</p><span className="finance-safe"><Receipt size={18} /> Somente neste dispositivo</span></div>
     <section className="finance-import-card"><h2>Importar documento financeiro</h2><p>PDF, JPG, PNG, CSV e formatos comuns. PDFs e imagens passam por leitura/OCR local.</p><div className="finance-import-actions">{importButton("expense", "Conta a pagar")}{importButton("income", "Conta a receber")}</div></section>
     <div className="finance-summary-grid"><div className="finance-summary-card"><WalletCards size={25} /><span>A pagar</span><strong>{money(totals.expense)}</strong><small>{items.filter((item) => item.type === "expense").length} lançamento(s)</small></div><div className="finance-summary-card"><WalletCards size={25} /><span>A receber</span><strong>{money(totals.income)}</strong><small>{items.filter((item) => item.type === "income").length} lançamento(s)</small></div><div className="finance-summary-card"><CalendarDays size={25} /><span>Vencidos</span><strong>{overdue.length}</strong><small>revisar pendência(s)</small></div></div>

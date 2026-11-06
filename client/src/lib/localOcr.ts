@@ -9,6 +9,16 @@ export type DocumentReadResult = {
 
 type OcrResult = { text: string; confidence: number };
 
+async function readSpreadsheet(file: File): Promise<DocumentReadResult> {
+  const xlsx = await import("xlsx");
+  const workbook = xlsx.read(await file.arrayBuffer(), { type: "array", cellDates: true });
+  const text = workbook.SheetNames.map((name) => {
+    const sheet = workbook.Sheets[name];
+    return `## ${name}\n${xlsx.utils.sheet_to_csv(sheet, { FS: "\t", RS: "\n" })}`;
+  }).join("\n").trim();
+  return { text: text.slice(0, 300000), method: text ? "text-layer" : "empty", confidence: text ? 100 : 0, pages: workbook.SheetNames.length };
+}
+
 async function recognizeBlob(file: Blob, onProgress?: (progress: OcrProgress) => void): Promise<OcrResult> {
   const { createWorker } = await import("tesseract.js");
   const worker = await createWorker("por+eng", 1, {
@@ -68,6 +78,9 @@ export async function readDocumentText(file: File, onProgress?: (progress: OcrPr
   if (file.type.startsWith("image/")) {
     const result = await recognizeBlob(file, onProgress);
     return { text: result.text, method: result.text ? "ocr" : "empty", confidence: result.confidence, pages: 1 };
+  }
+  if (/\.(xlsx|xls|ods)$/i.test(file.name) || /spreadsheet|excel/.test(file.type)) {
+    return readSpreadsheet(file);
   }
   if (file.type.startsWith("text/") || /\.(txt|csv|json|xml|html?)$/i.test(file.name)) {
     const text = (await file.text()).trim();

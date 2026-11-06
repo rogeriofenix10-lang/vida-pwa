@@ -74,6 +74,8 @@ export function useIrisVoice(options: {
   const lastFinalRef = useRef({ text: "", at: 0 });
   const conversationRef = useRef(false);
   const conversationTimerRef = useRef<number | null>(null);
+  const lastSpokenRef = useRef({ text: "", at: 0 });
+  const speechGenerationRef = useRef(0);
 
   const onCommandRef = useRef(onCommand);
   const onWakeRef = useRef(onWake);
@@ -126,6 +128,11 @@ export function useIrisVoice(options: {
 
   const speak = useCallback((text: string) => {
     if (typeof window === "undefined" || !("speechSynthesis" in window) || !text.trim()) return;
+    const normalized = text.toLocaleLowerCase("pt-BR").replace(/\s+/g, " ").trim();
+    const now = Date.now();
+    if (lastSpokenRef.current.text === normalized && now - lastSpokenRef.current.at < 12_000) return;
+    lastSpokenRef.current = { text: normalized, at: now };
+    const generation = ++speechGenerationRef.current;
     speakingRef.current = true;
     try {
       recognitionRef.current?.stop();
@@ -141,6 +148,7 @@ export function useIrisVoice(options: {
     utterance.pitch = 1.0;
 
     const resumeListening = () => {
+      if (generation !== speechGenerationRef.current) return;
       speakingRef.current = false;
       if (enabledRef.current) {
         conversationRef.current = true;
@@ -308,6 +316,8 @@ export function useIrisVoice(options: {
   }, [isBrowserSupported, refreshConversationTimer, speak]);
 
   const stop = useCallback(() => {
+    speechGenerationRef.current += 1;
+    lastSpokenRef.current = { text: "", at: 0 };
     restartingRef.current = true;
     speakingRef.current = false;
     conversationRef.current = false;

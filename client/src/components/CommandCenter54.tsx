@@ -523,6 +523,7 @@ export default function CommandCenter54() {
     },
     onCommand: (command) => {
       const normalized = command.toLocaleLowerCase("pt-BR").replace(/\s+/g, " ").trim();
+      if (isProcessing && !/^(pare|parar|silêncio|silencio|cancele)\b/i.test(normalized)) return;
       const now = Date.now();
       if (lastVoiceCommandRef.current.text === normalized && now - lastVoiceCommandRef.current.at < 2500) return;
       lastVoiceCommandRef.current = { text: normalized, at: now };
