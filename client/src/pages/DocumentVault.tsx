@@ -16,7 +16,7 @@ import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { readLocal, writeLocal } from "@/lib/irisLocalStore";
 import { runLocalOcr } from "@/lib/localOcr";
-import { loadIrisData, saveIrisData, uploadIrisFile } from "@/lib/irisWorker";
+import { downloadIrisFile, loadIrisData, saveIrisData, uploadIrisFile } from "@/lib/irisWorker";
 import "./document-vault.css";
 
 type Kind = "saude" | "financeiro" | "geral";
@@ -332,6 +332,16 @@ export default function DocumentVault() {
       setOcrId(null);
     }
   };
+  const downloadDocument = async (item: DocumentRecord) => {
+    if (!item.storageKey) { setMessage("Este documento só está disponível neste dispositivo."); return; }
+    try {
+      const blob = await downloadIrisFile(item.id);
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a"); anchor.href = url; anchor.download = item.name; anchor.click();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+      setMessage(`Download de ${item.name} iniciado.`);
+    } catch (error) { setMessage(error instanceof Error ? error.message : "Não foi possível baixar o documento."); }
+  };
   const financeItems = items.filter(
     (item) =>
       item.kind === "financeiro" &&
@@ -547,6 +557,11 @@ export default function DocumentVault() {
                         ? ` · R$ ${item.total.toFixed(2).replace(".", ",")}`
                         : ""}
                     </small>
+                  )}
+                  {item.storageKey && (
+                    <button className="document-confirm" type="button" onClick={() => void downloadDocument(item)}>
+                      <Download size={14} /> Baixar arquivo
+                    </button>
                   )}
                 </div>
               </article>

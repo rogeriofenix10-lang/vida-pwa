@@ -117,6 +117,17 @@ export async function uploadIrisFile(file: File, id?: string) {
   return data as { ok: true; id: string; key: string; name: string; size: number };
 }
 
+export async function downloadIrisFile(id: string) {
+  const response = await fetch(`${IRIS_WORKER_URL}/storage/file/${encodeURIComponent(id)}`, {
+    credentials: "include",
+  });
+  if (!response.ok) {
+    const data = (await response.json().catch(() => ({}))) as { error?: string; details?: string };
+    throw new Error(data.error || data.details || `Worker HTTP ${response.status}`);
+  }
+  return response.blob();
+}
+
 export type GmailHeader = { name?: string; value?: string };
 export type GmailMessage = {
   id: string;

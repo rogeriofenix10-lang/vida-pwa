@@ -26,6 +26,7 @@ import {
   gmailMessage,
   gmailMessages,
   gmailStatus,
+  googleCalendarEvents,
   loadIrisData,
   saveIrisData,
 } from "@/lib/irisWorker";
@@ -236,6 +237,9 @@ export default function CommandCenter54() {
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editText, setEditText] = useState("");
   const [newTaskInput, setNewTaskInput] = useState("");
+  const [calendarEvents, setCalendarEvents] = useState<Array<{ id: string; summary?: string; description?: string; start?: { date?: string; dateTime?: string }; end?: { date?: string; dateTime?: string } }>>([]);
+  const [calendarMessage, setCalendarMessage] = useState("Carregando agenda autorizada…");
+  const [analysisRows, setAnalysisRows] = useState<{ finances: Array<Record<string, unknown>>; documents: Array<Record<string, unknown>> }>({ finances: [], documents: [] });
   const lastVoiceCommandRef = useRef({ text: "", at: 0 });
   const lastVoiceErrorRef = useRef({ text: "", at: 0 });
   const { theme, toggleTheme } = useTheme();
@@ -274,6 +278,22 @@ export default function CommandCenter54() {
     return () => {
       cancelled = true;
     };
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    void googleCalendarEvents(new Date().toISOString())
+      .then((result) => {
+        if (!active) return;
+        const events = result.items ?? [];
+        setCalendarEvents(events);
+        setCalendarMessage(events.length ? "Agenda sincronizada com o Google Calendar." : "Nenhum compromisso futuro encontrado.");
+      })
+      .catch(() => { if (active) setCalendarMessage("Google Calendar não autorizado ou indisponível. Autorize em Google Workspace."); });
+    void Promise.all([loadIrisData("finances"), loadIrisData("documents")])
+      .then(([finances, documents]) => { if (active) setAnalysisRows({ finances: finances.items, documents: documents.items }); })
+      .catch(() => undefined);
+    return () => { active = false; };
   }, []);
 
   const [aiProvider, setAiProvider] = useState<AiProvider>(() => {
@@ -1662,54 +1682,13 @@ export default function CommandCenter54() {
                 </div>
 
                 <div className="iris54-feature-grid">
-                  <div className="iris54-feature-card">
-                    <span
-                      className="iris54-priority-badge"
-                      style={{
-                        background: "rgba(59, 130, 246, 0.2)",
-                        color: "#93c5fd",
-                      }}
-                    >
-                      PRÓXIMO
-                    </span>
-                    <strong>Vencimento de Contas</strong>
-                    <p>
-                      Conta de internet com prazo programado para amanhã. Alerta
-                      automático ativo.
-                    </p>
-                  </div>
-                  <div className="iris54-feature-card">
-                    <span
-                      className="iris54-priority-badge"
-                      style={{
-                        background: "rgba(16, 185, 129, 0.2)",
-                        color: "#6ee7b7",
-                      }}
-                    >
-                      SINCRONIZADO
-                    </span>
-                    <strong>Seguro e Vistoria</strong>
-                    <p>
-                      Seguro veicular com vencimento em 12 dias. Cotações
-                      pré-analisadas pela Iris.
-                    </p>
-                  </div>
-                  <div className="iris54-feature-card">
-                    <span
-                      className="iris54-priority-badge"
-                      style={{
-                        background: "rgba(139, 92, 246, 0.2)",
-                        color: "#c4b5fd",
-                      }}
-                    >
-                      REVISÃO
-                    </span>
-                    <strong>Rotina Semanal</strong>
-                    <p>
-                      Revisão de documentos e contratos com sincronização
-                      automática.
-                    </p>
-                  </div>
+                  {calendarEvents.length ? calendarEvents.slice(0, 12).map((event) => (
+                    <div className="iris54-feature-card" key={event.id}>
+                      <span className="iris54-priority-badge" style={{ background: "rgba(59, 130, 246, 0.2)", color: "#93c5fd" }}>CALENDAR</span>
+                      <strong>{event.summary || "Compromisso sem título"}</strong>
+                      <p>{event.start?.dateTime || event.start?.date || "Data não informada"}{event.description ? ` · ${event.description}` : ""}</p>
+                    </div>
+                  )) : <div className="iris54-feature-card"><strong>Agenda sem dados demonstrativos</strong><p>{calendarMessage}</p></div>}
                 </div>
 
                 <div
@@ -2016,30 +1995,9 @@ export default function CommandCenter54() {
                 </div>
 
                 <div className="iris54-feature-grid">
-                  <div className="iris54-feature-card">
-                    <span className="iris54-kicker">ECONOMIA</span>
-                    <strong>Oportunidade de Redução</strong>
-                    <p>
-                      Assinatura pouco utilizada identificada. Sugestão de
-                      cancelamento com economia estimada.
-                    </p>
-                  </div>
-                  <div className="iris54-feature-card">
-                    <span className="iris54-kicker">RISCO &amp; PRAZOS</span>
-                    <strong>Score de Pontualidade</strong>
-                    <p>
-                      100% das obrigações resolvidas dentro do prazo no último
-                      ciclo de 30 dias.
-                    </p>
-                  </div>
-                  <div className="iris54-feature-card">
-                    <span className="iris54-kicker">ASSISTÊNCIA PROATIVA</span>
-                    <strong>Próximos Passos Sugeridos</strong>
-                    <p>
-                      A Iris antecipa renovações e pendências antes que se
-                      tornem urgentes.
-                    </p>
-                  </div>
+                  <div className="iris54-feature-card"><span className="iris54-kicker">DADOS REAIS</span><strong>Finanças carregadas</strong><p>{analysisRows.finances.length} lançamento(s) persistente(s) no D1. Gere um relatório para interpretação detalhada.</p></div>
+                  <div className="iris54-feature-card"><span className="iris54-kicker">DOCUMENTOS</span><strong>Arquivo catalogado</strong><p>{analysisRows.documents.length} documento(s) encontrado(s) no arquivo persistente.</p></div>
+                  <div className="iris54-feature-card"><span className="iris54-kicker">RADAR</span><strong>Pendências atuais</strong><p>{items.filter((item) => item.status !== "completed").length} item(ns) não concluído(s) no Radar local/D1.</p></div>
                 </div>
 
                 <div
