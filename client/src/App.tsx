@@ -51,6 +51,9 @@ function Router() {
         <Route path="/comercial" component={BusinessHub} />
         <Route path="/documentos" component={DocumentVault} />
         <Route path="/financas" component={FinanceHub} />
+        <Route path="/financas/" component={FinanceHub} />
+        <Route path="/financeiro" component={FinanceHub} />
+        <Route path="/financeiro/" component={FinanceHub} />
         <Route path="/google" component={GoogleWorkspace} />
         <Route path="/404" component={NotFound} />
         <Route component={NotFound} />

@@ -41,7 +41,7 @@ export async function runLocalOcr(file: Blob, onProgress?: (progress: OcrProgres
 async function readPdf(file: Blob, onProgress?: (progress: OcrProgress) => void): Promise<DocumentReadResult> {
   const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs") as typeof import("pdfjs-dist/legacy/build/pdf.mjs");
   const bytes = new Uint8Array(await file.arrayBuffer());
-  const pdf = await pdfjs.getDocument({ data: bytes, disableWorker: true }).promise;
+  const pdf = await pdfjs.getDocument({ data: bytes }).promise;
   const textParts: string[] = [];
   for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
     const page = await pdf.getPage(pageNumber);
@@ -62,8 +62,10 @@ async function readPdf(file: Blob, onProgress?: (progress: OcrProgress) => void)
     canvas.width = Math.ceil(viewport.width); canvas.height = Math.ceil(viewport.height);
     const context = canvas.getContext("2d");
     if (!context) continue;
-    await page.render({ canvasContext: context, viewport }).promise;
-    const result = await recognizeBlob(canvas, (progress) => onProgress?.({ ...progress, progress: ((pageNumber - 1) + progress.progress) / maxPages }));
+    await page.render({ canvas, canvasContext: context, viewport }).promise;
+    const canvasBlob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/png"));
+    if (!canvasBlob) continue;
+    const result = await recognizeBlob(canvasBlob, (progress) => onProgress?.({ ...progress, progress: ((pageNumber - 1) + progress.progress) / maxPages }));
     if (result.text) ocrParts.push(result.text);
     confidenceTotal += result.confidence;
   }
