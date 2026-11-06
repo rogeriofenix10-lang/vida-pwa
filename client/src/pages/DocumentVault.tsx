@@ -17,6 +17,7 @@ import { Button } from "@/components/ui/button";
 import { readLocal, writeLocal } from "@/lib/irisLocalStore";
 import { runLocalOcr } from "@/lib/localOcr";
 import { downloadIrisFile, loadIrisData, saveIrisData, uploadIrisFile } from "@/lib/irisWorker";
+import { readDocumentText } from "@/lib/localOcr";
 import "./document-vault.css";
 
 type Kind = "saude" | "financeiro" | "geral";
@@ -106,21 +107,6 @@ function parseMarkers(value: string) {
     if (hit) markers[label] = Number(hit[1].replace(",", "."));
   }
   return markers;
-}
-async function extractText(file: File) {
-  if (
-    file.type.startsWith("text/") ||
-    /\.(txt|csv|json|xml|html?)$/i.test(file.name)
-  )
-    return (await file.text()).slice(0, 200000);
-  if (file.type === "application/pdf" || /\.pdf$/i.test(file.name)) {
-    const raw = new TextDecoder("latin1").decode(await file.arrayBuffer());
-    return raw
-      .replace(/[^\x09\x0A\x0D\x20-\x7EÀ-ÿ]/g, " ")
-      .replace(/\s+/g, " ")
-      .slice(0, 200000);
-  }
-  return "";
 }
 function classify(file: File, text: string): Kind {
   const combined = `${file.name} ${text}`;
@@ -213,9 +199,11 @@ export default function DocumentVault() {
         duplicates++;
         continue;
       }
-      const text = await extractText(file);
+      const reading = await readDocumentText(file);
+      const text = reading.text;
+      const readable = Boolean(text) && (reading.method !== "ocr" || reading.confidence >= 45);
       const kind = classify(file, text);
-      const money = parseMoney(text);
+      const money = readable ? parseMoney(text) : [];
       const record: DocumentRecord = {
         id: crypto.randomUUID(),
         name: file.name,
@@ -229,8 +217,8 @@ export default function DocumentVault() {
               : "Documentos",
         kind,
         createdAt: new Date().toISOString(),
-        extractedText: text,
-        analysis: text
+        extractedText: readable ? text : "",
+        analysis: readable
           ? "texto extraído"
           : file.type.startsWith("image/") || file.type === "application/pdf"
             ? "arquivado · OCR necessário"
@@ -246,7 +234,7 @@ export default function DocumentVault() {
         markers: parseMarkers(text),
         hash,
         reviewStatus: "pending",
-        confidence: text ? 0.78 : 0.35,
+        confidence: readable ? Math.min(1, reading.confidence / 100) : 0.2,
         blob: file,
       };
       try {
