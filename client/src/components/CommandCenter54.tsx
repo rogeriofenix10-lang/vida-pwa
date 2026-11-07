@@ -216,13 +216,20 @@ export default function CommandCenter54() {
       const stored = localStorage.getItem("iris-chat-history");
       if (stored) {
         const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const staleFallback = /não tenho acesso direto|nunca\*\* execut|ações externas.*sem a sua autorização/i;
+          const migrated = parsed.filter(
+            (message): message is ChatMessage =>
+              message && typeof message.text === "string" && !staleFallback.test(message.text),
+          );
+          if (migrated.length > 0) return migrated;
+        }
       }
     } catch {}
     return [
       {
         role: "assistant",
-        text: "Olá. Sou a Iris IA. Diga ou digite o que você precisa organizar e eu preparo o próximo passo.",
+        text: "Olá. Sou a Iris IA. Estou no modo conectado e posso consultar Gmail, Calendar e arquivos autorizados quando você pedir. Ações que alteram dados sempre exigem sua confirmação.",
       },
     ];
   });
