@@ -251,6 +251,8 @@ export default function CommandCenter54() {
   const [analysisRows, setAnalysisRows] = useState<{ finances: Array<Record<string, unknown>>; documents: Array<Record<string, unknown>> }>({ finances: [], documents: [] });
   const lastVoiceCommandRef = useRef({ text: "", at: 0 });
   const lastVoiceErrorRef = useRef({ text: "", at: 0 });
+  const chatFeedRef = useRef<HTMLDivElement | null>(null);
+  const chatPinnedToBottomRef = useRef(true);
   const { theme, toggleTheme } = useTheme();
 
   useEffect(() => {
@@ -261,6 +263,17 @@ export default function CommandCenter54() {
       );
     } catch {}
   }, [chat]);
+
+  useEffect(() => {
+    if (!chatPinnedToBottomRef.current || !chatFeedRef.current) return;
+    const frame = window.requestAnimationFrame(() => {
+      chatFeedRef.current?.scrollTo({
+        top: chatFeedRef.current.scrollHeight,
+        behavior: "smooth",
+      });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [chat, isProcessing]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1372,7 +1385,15 @@ export default function CommandCenter54() {
                   </button>
                 </div>
 
-                <div className="iris54-chat-feed">
+                <div
+                  ref={chatFeedRef}
+                  className="iris54-chat-feed"
+                  onScroll={(event) => {
+                    const feed = event.currentTarget;
+                    chatPinnedToBottomRef.current =
+                      feed.scrollHeight - feed.scrollTop - feed.clientHeight < 72;
+                  }}
+                >
                   {chat.map((message, idx) => (
                     <div
                       className={`iris54-chat-bubble ${message.role}`}
