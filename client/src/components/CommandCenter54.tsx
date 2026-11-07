@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { startLogin } from "@/const";
 import { trpc } from "@/lib/trpc";
@@ -196,6 +196,7 @@ const onboardingSteps = [
 ];
 
 export default function CommandCenter54() {
+  const [, navigate] = useLocation();
   const { isAuthenticated } = useAuth();
   const [activeView, setActiveView] = useState<ActiveModalView>(null);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -1200,7 +1201,7 @@ export default function CommandCenter54() {
             <button
               type="button"
               className="iris54-quick-btn"
-              onClick={() => setActiveView("radar")}
+              onClick={() => navigate("/financas")}
             >
               <span className="icon">
                 <WalletCards size={17} />
