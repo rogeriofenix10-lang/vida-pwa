@@ -14,16 +14,18 @@ export default function FirstRunGate({
     () => {
       if (IRIS_STATIC_MODE) {
         localStorage.setItem(FIRST_RUN_KEY, "1");
-        localStorage.setItem("iris.mode", "demo");
+        localStorage.setItem("iris.mode", "connected");
         return true;
       }
       return localStorage.getItem(FIRST_RUN_KEY) === "1";
     },
   );
-  const [mode, setMode] = useState<"demo" | "connected">("demo");
+  const [mode, setMode] = useState<"demo" | "connected">(
+    IRIS_STATIC_MODE ? "connected" : "demo",
+  );
   if (completed) return <>{children}</>;
   const finish = () => {
-    const selected = IRIS_STATIC_MODE ? "demo" : mode;
+    const selected = IRIS_STATIC_MODE ? "connected" : mode;
     localStorage.setItem("iris.mode", selected);
     localStorage.setItem(FIRST_RUN_KEY, "1");
     setCompleted(true);
@@ -59,6 +61,7 @@ export default function FirstRunGate({
               type="radio"
               checked={mode === "demo"}
               onChange={() => setMode("demo")}
+              disabled={IRIS_STATIC_MODE}
             />
           </label>
           <label className="memory-row">
@@ -66,22 +69,21 @@ export default function FirstRunGate({
               <b>Conectado</b>
               <br />
               <small>
-                Somente quando houver backend configurado; cada integração ainda
-                exigirá aprovação.
+                Usa o Worker gratuito da Iris; cada integração ainda exigirá
+                aprovação antes de alterar dados.
               </small>
             </span>
             <input
               type="radio"
               checked={mode === "connected"}
               onChange={() => setMode("connected")}
-              disabled={IRIS_STATIC_MODE}
             />
           </label>
         </div>
         {IRIS_STATIC_MODE && (
           <small>
-            Esta publicação é PWA estática: o modo conectado permanece
-            desativado.
+            Esta publicação usa o Worker conectado da Iris sem expor chaves no
+            navegador. O modo local continua disponível como fallback técnico.
           </small>
         )}
         <Button onClick={finish}>Continuar com segurança</Button>
