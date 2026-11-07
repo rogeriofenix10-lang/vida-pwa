@@ -27,6 +27,7 @@ import {
   gmailMessages,
   gmailStatus,
   googleCalendarEvents,
+  googleCalendarStatus,
   loadIrisData,
   saveIrisData,
 } from "@/lib/irisWorker";
@@ -752,6 +753,33 @@ export default function CommandCenter54() {
           : "Não encontrei e-mails na consulta atual.";
         setChat((current) => [...current, { role: "assistant", text: reply }]);
         if (voiceEnabled) voice.speak(reply);
+        return;
+      }
+
+      const isCalendarCommand = /(calendário|calendario|agenda|calendar|compromisso|evento)/i.test(text);
+      if (isCalendarCommand) {
+        const status = await googleCalendarStatus();
+        if (!status.authorized) {
+          const reply = "O Google Calendar ainda não está autorizado. Abra Conexões e autorize o Calendar antes de consultar a agenda.";
+          setChat((current) => [...current, { role: "assistant", text: reply }]);
+          if (voiceEnabled) voice.speak(reply);
+          return;
+        }
+        const calendar = await googleCalendarEvents(new Date().toISOString());
+        const events = (calendar.items ?? []).slice(0, 10);
+        const reply = events.length
+          ? `Aqui estão os próximos compromissos da sua agenda:\n${events.map((event, index) => {
+              const date = event.start?.dateTime
+                ? new Date(event.start.dateTime).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })
+                : event.start?.date
+                  ? new Date(`${event.start.date}T00:00:00`).toLocaleDateString("pt-BR")
+                  : "horário não informado";
+              return `${index + 1}. ${event.summary || "Sem título"} — ${date}${event.location ? ` — ${event.location}` : ""}`;
+            }).join("\n")}`
+          : "Não encontrei compromissos futuros na sua agenda autorizada.";
+        setChat((current) => [...current, { role: "assistant", text: reply }]);
+        if (voiceEnabled) voice.speak(reply);
+        setIrisState("completed");
         return;
       }
 
