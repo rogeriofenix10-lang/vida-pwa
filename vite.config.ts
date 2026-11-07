@@ -160,7 +160,9 @@ const plugins = [
 
 export default defineConfig({
   plugins,
-  base: process.env.VITE_IRIS_STATIC === "true" ? "./" : "/",
+  // O Pages serve rotas profundas como /financas e /google; assets relativos
+  // apontariam para /financas/assets e causariam tela branca.
+  base: "/",
   resolve: {
     alias: {
       "@": path.resolve(import.meta.dirname, "client", "src"),

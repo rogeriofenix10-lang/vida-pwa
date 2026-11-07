@@ -45,5 +45,17 @@ if (existsSync(serviceWorkerPath)) {
     ),
   );
 }
+
+const routesPath = resolve(output, "manus-routes.json");
+if (existsSync(routesPath)) {
+  const routes = JSON.parse(readFileSync(routesPath, "utf8"));
+  for (const route of routes.routes || []) {
+    const path = String(route.path || "");
+    if (!path || path === "/" || path.includes(":")) continue;
+    const routeDir = resolve(output, path.replace(/^\/+/, ""));
+    mkdirSync(routeDir, { recursive: true });
+    copyFileSync(index, resolve(routeDir, "index.html"));
+  }
+}
 copyFileSync(index, resolve(output, "404.html"));
 console.log(`PWA estático pronto em ${output}`);
