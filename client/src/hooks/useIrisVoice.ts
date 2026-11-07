@@ -44,7 +44,8 @@ export type IrisVoiceStatus =
 
 function getRecognition(): Recognition | null {
   if (typeof window === "undefined") return null;
-  const Constructor = window.SpeechRecognition ?? window.webkitSpeechRecognition;
+  const Constructor =
+    window.SpeechRecognition ?? window.webkitSpeechRecognition;
   return Constructor ? new Constructor() : null;
 }
 
@@ -76,6 +77,8 @@ export function useIrisVoice(options: {
   const conversationTimerRef = useRef<number | null>(null);
   const lastSpokenRef = useRef({ text: "", at: 0 });
   const speechGenerationRef = useRef(0);
+  const finalBufferRef = useRef("");
+  const finalFlushTimerRef = useRef<number | null>(null);
 
   const onCommandRef = useRef(onCommand);
   const onWakeRef = useRef(onWake);
@@ -98,11 +101,13 @@ export function useIrisVoice(options: {
     wakeWordRef.current = wakeWord;
   }, [enabled, language, wakeWord]);
 
-  const isBrowserSupported = typeof window !== "undefined" && Boolean(window.SpeechRecognition || window.webkitSpeechRecognition);
+  const isBrowserSupported =
+    typeof window !== "undefined" &&
+    Boolean(window.SpeechRecognition || window.webkitSpeechRecognition);
 
-  const [status, setStatus] = useState<IrisVoiceStatus>(() => (
-    isBrowserSupported ? "idle" : "unsupported"
-  ));
+  const [status, setStatus] = useState<IrisVoiceStatus>(() =>
+    isBrowserSupported ? "idle" : "unsupported",
+  );
 
   const clearConversationTimer = useCallback(() => {
     if (conversationTimerRef.current !== null) {
@@ -123,197 +128,268 @@ export function useIrisVoice(options: {
 
   const refreshConversationTimer = useCallback(() => {
     clearConversationTimer();
-    conversationTimerRef.current = window.setTimeout(() => endConversation(), 14_000);
+    conversationTimerRef.current = window.setTimeout(
+      () => endConversation(),
+      14_000,
+    );
   }, [clearConversationTimer, endConversation]);
 
-  const speak = useCallback((text: string) => {
-    if (typeof window === "undefined" || !("speechSynthesis" in window) || !text.trim()) return;
-    const normalized = text.toLocaleLowerCase("pt-BR").replace(/\s+/g, " ").trim();
-    const now = Date.now();
-    if (lastSpokenRef.current.text === normalized && now - lastSpokenRef.current.at < 12_000) return;
-    lastSpokenRef.current = { text: normalized, at: now };
-    const generation = ++speechGenerationRef.current;
-    speakingRef.current = true;
-    try {
-      recognitionRef.current?.stop();
-    } catch {
-      // Ignora erro ao pausar reconhecimento para falar
-    }
-    setStatus("speaking");
-    window.speechSynthesis.cancel();
-
-    const utterance = new SpeechSynthesisUtterance(text.slice(0, 2500));
-    utterance.lang = languageRef.current;
-    utterance.rate = 1.05;
-    utterance.pitch = 1.0;
-
-    const resumeListening = () => {
-      if (generation !== speechGenerationRef.current) return;
-      speakingRef.current = false;
-      if (enabledRef.current) {
-        conversationRef.current = true;
-        setStatus("conversation");
-        refreshConversationTimer();
-        try {
-          recognitionRef.current?.start();
-        } catch {
-          // Navegador pode estar reiniciando
-        }
-      } else {
-        setStatus("idle");
+  const speak = useCallback(
+    (text: string) => {
+      if (
+        typeof window === "undefined" ||
+        !("speechSynthesis" in window) ||
+        !text.trim()
+      )
+        return;
+      const normalized = text
+        .toLocaleLowerCase("pt-BR")
+        .replace(/\s+/g, " ")
+        .trim();
+      const now = Date.now();
+      if (
+        lastSpokenRef.current.text === normalized &&
+        now - lastSpokenRef.current.at < 12_000
+      )
+        return;
+      lastSpokenRef.current = { text: normalized, at: now };
+      const generation = ++speechGenerationRef.current;
+      speakingRef.current = true;
+      try {
+        recognitionRef.current?.stop();
+      } catch {
+        // Ignora erro ao pausar reconhecimento para falar
       }
-    };
+      setStatus("speaking");
+      window.speechSynthesis.cancel();
 
-    utterance.onend = resumeListening;
-    utterance.onerror = resumeListening;
-    window.speechSynthesis.speak(utterance);
-  }, [refreshConversationTimer]);
+      const utterance = new SpeechSynthesisUtterance(text.slice(0, 2500));
+      utterance.lang = languageRef.current;
+      utterance.rate = 1.05;
+      utterance.pitch = 1.0;
 
-  const start = useCallback((directMode = false) => {
-    if (!isBrowserSupported) {
-      setStatus("unsupported");
-      onErrorRef.current?.("Reconhecimento de voz não suportado neste navegador. Recomendamos o Google Chrome ou Microsoft Edge.");
-      return false;
-    }
-
-    fatalErrorRef.current = false;
-    restartingRef.current = false;
-    let recognition = recognitionRef.current;
-    if (!recognition) {
-      recognition = getRecognition();
-      if (!recognition) {
-        setStatus("unsupported");
-        onErrorRef.current?.("Não foi possível inicializar o motor de reconhecimento de voz.");
-        return false;
-      }
-      recognitionRef.current = recognition;
-    }
-
-    if (directMode) {
-      conversationRef.current = true;
-      refreshConversationTimer();
-    }
-
-    recognition.continuous = true;
-    recognition.interimResults = true;
-    recognition.lang = languageRef.current;
-
-    recognition.onresult = (event: RecognitionEvent) => {
-      let interim = "";
-      for (let i = event.resultIndex; i < event.results.length; i += 1) {
-        const item = event.results[i];
-        if (!item) continue;
-        const piece = item[0]?.transcript ?? "";
-
-        if (item.isFinal) {
-          const transcript = piece.trim();
-          if (!transcript || speakingRef.current) continue;
-
-          const now = Date.now();
-          const normalizedFinal = transcript.toLocaleLowerCase("pt-BR").replace(/\s+/g, " ");
-          if (lastFinalRef.current.text === normalizedFinal && now - lastFinalRef.current.at < 2500) continue;
-          lastFinalRef.current = { text: normalizedFinal, at: now };
-
-          const normalized = transcript.toLocaleLowerCase("pt-BR");
-          const wake = wakeWordRef.current.toLocaleLowerCase("pt-BR");
-          const wakeIndex = normalized.indexOf(wake);
-
-          // Se estiver em modo direto de conversa/clique OU já despertado
-          if (conversationRef.current) {
-            let command = transcript;
-            if (wakeIndex >= 0) {
-              command = transcript.slice(wakeIndex + wake.length).replace(/^[,.:;\s-]+/, "").trim();
-            }
-            if (command) {
-              onTranscriptRef.current?.(command, true);
-              onCommandRef.current(command);
-            }
-            setStatus("conversation");
-            refreshConversationTimer();
-            continue;
-          }
-
-          // Modo passivo escutando wake word (ex: "iris")
-          if (wakeIndex >= 0) {
-            const command = transcript.slice(wakeIndex + wake.length).replace(/^[,.:;\s-]+/, "").trim();
-            conversationRef.current = true;
-            setStatus("wake");
-            onWakeRef.current?.();
-            refreshConversationTimer();
-
-            if (command) {
-              onTranscriptRef.current?.(command, true);
-              onCommandRef.current(command);
-            } else {
-              speak("Sim? Estou ouvindo.");
-            }
+      const resumeListening = () => {
+        if (generation !== speechGenerationRef.current) return;
+        speakingRef.current = false;
+        if (enabledRef.current) {
+          conversationRef.current = true;
+          setStatus("conversation");
+          refreshConversationTimer();
+          try {
+            recognitionRef.current?.start();
+          } catch {
+            // Navegador pode estar reiniciando
           }
         } else {
-          interim += piece;
+          setStatus("idle");
         }
+      };
+
+      utterance.onend = resumeListening;
+      utterance.onerror = resumeListening;
+      window.speechSynthesis.speak(utterance);
+    },
+    [refreshConversationTimer],
+  );
+
+  const start = useCallback(
+    (directMode = false) => {
+      if (!isBrowserSupported) {
+        setStatus("unsupported");
+        onErrorRef.current?.(
+          "Reconhecimento de voz não suportado neste navegador. Recomendamos o Google Chrome ou Microsoft Edge.",
+        );
+        return false;
       }
 
-      if (interim && !speakingRef.current) {
-        onTranscriptRef.current?.(interim.trim(), false);
+      fatalErrorRef.current = false;
+      restartingRef.current = false;
+      let recognition = recognitionRef.current;
+      if (!recognition) {
+        recognition = getRecognition();
+        if (!recognition) {
+          setStatus("unsupported");
+          onErrorRef.current?.(
+            "Não foi possível inicializar o motor de reconhecimento de voz.",
+          );
+          return false;
+        }
+        recognitionRef.current = recognition;
       }
-    };
 
-    recognition.onerror = (event: { error: string }) => {
-      const err = event.error;
-      if (err === "not-allowed" || err === "service-not-allowed") {
-        fatalErrorRef.current = true;
-        restartingRef.current = true;
-        setStatus("permission");
-        onErrorRef.current?.("Permissão para usar o microfone não foi concedida.");
-      } else if (err === "no-speech") {
-        // Pausa momentânea na fala não é erro fatal
-      } else if (err === "audio-capture") {
-        fatalErrorRef.current = true;
-        restartingRef.current = true;
-        setStatus("error");
-        onErrorRef.current?.("Nenhum microfone encontrado ou dispositivo em uso.");
-      } else if (err !== "aborted") {
-        if (err === "network") {
+      if (directMode) {
+        conversationRef.current = true;
+        refreshConversationTimer();
+      }
+
+      recognition.continuous = true;
+      recognition.interimResults = true;
+      recognition.lang = languageRef.current;
+
+      const flushFinalBuffer = () => {
+        if (finalFlushTimerRef.current !== null) {
+          window.clearTimeout(finalFlushTimerRef.current);
+          finalFlushTimerRef.current = null;
+        }
+        const transcript = finalBufferRef.current.trim();
+        finalBufferRef.current = "";
+        if (!transcript || speakingRef.current) return;
+
+        const now = Date.now();
+        const normalizedFinal = transcript
+          .toLocaleLowerCase("pt-BR")
+          .replace(/\s+/g, " ");
+        if (
+          lastFinalRef.current.text === normalizedFinal &&
+          now - lastFinalRef.current.at < 2500
+        )
+          return;
+        lastFinalRef.current = { text: normalizedFinal, at: now };
+
+        const normalized = transcript.toLocaleLowerCase("pt-BR");
+        const wake = wakeWordRef.current.toLocaleLowerCase("pt-BR");
+        const wakeIndex = normalized.indexOf(wake);
+        if (conversationRef.current) {
+          const command =
+            wakeIndex >= 0
+              ? transcript
+                  .slice(wakeIndex + wake.length)
+                  .replace(/^[,.:;\s-]+/, "")
+                  .trim()
+              : transcript;
+          if (command) {
+            onTranscriptRef.current?.(command, true);
+            onCommandRef.current(command);
+          }
+          setStatus("conversation");
+          refreshConversationTimer();
+          return;
+        }
+        if (wakeIndex >= 0) {
+          const command = transcript
+            .slice(wakeIndex + wake.length)
+            .replace(/^[,.:;\s-]+/, "")
+            .trim();
+          conversationRef.current = true;
+          setStatus("wake");
+          onWakeRef.current?.();
+          refreshConversationTimer();
+          if (command) {
+            onTranscriptRef.current?.(command, true);
+            onCommandRef.current(command);
+          } else {
+            speak("Sim? Estou ouvindo.");
+          }
+        }
+      };
+
+      recognition.onresult = (event: RecognitionEvent) => {
+        let interim = "";
+        for (let i = event.resultIndex; i < event.results.length; i += 1) {
+          const item = event.results[i];
+          if (!item) continue;
+          const piece = item[0]?.transcript ?? "";
+          if (item.isFinal) {
+            const transcript = piece.trim();
+            if (!transcript || speakingRef.current) continue;
+            finalBufferRef.current =
+              `${finalBufferRef.current} ${transcript}`.trim();
+            if (finalFlushTimerRef.current !== null)
+              window.clearTimeout(finalFlushTimerRef.current);
+            const stopCommand =
+              /^(pare|parar|silêncio|silencio|cancele)$/i.test(
+                finalBufferRef.current.trim(),
+              );
+            finalFlushTimerRef.current = window.setTimeout(
+              flushFinalBuffer,
+              stopCommand ? 80 : 1100,
+            );
+          } else {
+            interim += piece;
+          }
+        }
+        if ((interim || finalBufferRef.current) && !speakingRef.current) {
+          onTranscriptRef.current?.(
+            `${finalBufferRef.current} ${interim}`.trim(),
+            false,
+          );
+        }
+      };
+
+      recognition.onerror = (event: { error: string }) => {
+        const err = event.error;
+        if (err === "not-allowed" || err === "service-not-allowed") {
           fatalErrorRef.current = true;
           restartingRef.current = true;
-        }
-        setStatus("error");
-        onErrorRef.current?.(`Falha no reconhecimento de voz (${err}).`);
-      }
-    };
-
-    recognition.onend = () => {
-      if (!fatalErrorRef.current && !restartingRef.current && enabledRef.current && !speakingRef.current) {
-        window.setTimeout(() => {
-          if (!fatalErrorRef.current && !restartingRef.current && enabledRef.current && !speakingRef.current) {
-            try {
-              recognitionRef.current?.start();
-              setStatus(conversationRef.current ? "conversation" : "listening");
-            } catch {
-              // Já em execução
-            }
+          setStatus("permission");
+          onErrorRef.current?.(
+            "Permissão para usar o microfone não foi concedida.",
+          );
+        } else if (err === "no-speech") {
+          // Pausa momentânea na fala não é erro fatal
+        } else if (err === "audio-capture") {
+          fatalErrorRef.current = true;
+          restartingRef.current = true;
+          setStatus("error");
+          onErrorRef.current?.(
+            "Nenhum microfone encontrado ou dispositivo em uso.",
+          );
+        } else if (err !== "aborted") {
+          if (err === "network") {
+            fatalErrorRef.current = true;
+            restartingRef.current = true;
           }
-        }, 300);
-      } else if (!enabledRef.current && !speakingRef.current) {
-        setStatus("idle");
-      }
-    };
+          setStatus("error");
+          onErrorRef.current?.(`Falha no reconhecimento de voz (${err}).`);
+        }
+      };
 
-    try {
-      recognition.start();
-      setStatus(directMode ? "conversation" : "listening");
-      return true;
-    } catch (err: unknown) {
-      if (err instanceof Error && err.name === "InvalidStateError") {
-        // Já estava ativo; confirma status
+      recognition.onend = () => {
+        if (
+          !fatalErrorRef.current &&
+          !restartingRef.current &&
+          enabledRef.current &&
+          !speakingRef.current
+        ) {
+          window.setTimeout(() => {
+            if (
+              !fatalErrorRef.current &&
+              !restartingRef.current &&
+              enabledRef.current &&
+              !speakingRef.current
+            ) {
+              try {
+                recognitionRef.current?.start();
+                setStatus(
+                  conversationRef.current ? "conversation" : "listening",
+                );
+              } catch {
+                // Já em execução
+              }
+            }
+          }, 300);
+        } else if (!enabledRef.current && !speakingRef.current) {
+          setStatus("idle");
+        }
+      };
+
+      try {
+        recognition.start();
         setStatus(directMode ? "conversation" : "listening");
         return true;
+      } catch (err: unknown) {
+        if (err instanceof Error && err.name === "InvalidStateError") {
+          // Já estava ativo; confirma status
+          setStatus(directMode ? "conversation" : "listening");
+          return true;
+        }
+        setStatus("permission");
+        onErrorRef.current?.("Não foi possível acessar o microfone.");
+        return false;
       }
-      setStatus("permission");
-      onErrorRef.current?.("Não foi possível acessar o microfone.");
-      return false;
-    }
-  }, [isBrowserSupported, refreshConversationTimer, speak]);
+    },
+    [isBrowserSupported, refreshConversationTimer, speak],
+  );
 
   const stop = useCallback(() => {
     speechGenerationRef.current += 1;
@@ -322,6 +398,11 @@ export function useIrisVoice(options: {
     speakingRef.current = false;
     conversationRef.current = false;
     clearConversationTimer();
+    finalBufferRef.current = "";
+    if (finalFlushTimerRef.current !== null) {
+      window.clearTimeout(finalFlushTimerRef.current);
+      finalFlushTimerRef.current = null;
+    }
 
     if (typeof window !== "undefined" && "speechSynthesis" in window) {
       window.speechSynthesis.cancel();
@@ -371,6 +452,7 @@ export function useIrisVoice(options: {
     speak,
     endConversation,
     supported: isBrowserSupported,
-    isListening: status === "listening" || status === "conversation" || status === "wake",
+    isListening:
+      status === "listening" || status === "conversation" || status === "wake",
   };
 }
