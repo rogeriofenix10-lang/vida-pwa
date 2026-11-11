@@ -27,3 +27,6 @@
 - [x] **Catálogo:** fazer os botões de exportação do catálogo baixarem arquivos JSON e CSV utilizáveis.
 - [x] **PWA:** não exibir “não instalado” como falha; conferir manifesto, ícones com dimensões corretas e registro real do Service Worker.
 - [x] **URL publicada:** usar o endereço estável do app; URLs com hash identificam implantações antigas e não recebem atualização.
+
+# Ajuste solicitado de layout (11/11/2026)
+- [x] Remover o painel fixo de serviços remotos do layout geral e manter o controle acessível em Configurações, sem alterar autenticação, sessão ou dados locais.

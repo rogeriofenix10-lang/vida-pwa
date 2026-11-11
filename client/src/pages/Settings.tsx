@@ -6,6 +6,7 @@ import type { SupportedLanguage } from "@shared/irisLanguageAndUpload";
 import { hashPin } from "@/components/LocalLockGate";
 import { Button } from "@/components/ui/button";
 import { lockIrisAccess } from "@/lib/irisWorker";
+import RemoteAccessGate from "@/components/RemoteAccessGate";
 
 const REMOTE_OPT_IN_KEY = "iris.remoteOptIn";
 
@@ -91,6 +92,11 @@ export default function Settings() {
           </p>
           <small>Documentos, finanças e catálogo locais continuam disponíveis em qualquer modo. A credencial remota é mantida somente em memória após validação e será pedida novamente após recarregar ou fechar.</small>
         </div>
+
+        <details className="memory-settings remote-access-settings">
+          <summary>Controle dos serviços remotos</summary>
+          <RemoteAccessGate />
+        </details>
 
         <div className="notification-settings">
           <strong>Privacidade e custo</strong>

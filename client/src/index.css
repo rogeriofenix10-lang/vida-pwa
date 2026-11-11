@@ -4634,3 +4634,11 @@ html body #root .iris-command-anchor-inner {
 @media (max-width: 560px) {
   .remote-access-gate { top: 7px; right: 7px; width: min(350px, calc(100vw - 14px)); padding: 8px 10px; }
 }
+
+.remote-access-settings .remote-access-gate {
+  position: static;
+  z-index: auto;
+  inset: auto;
+  width: 100%;
+  margin: 0;
+}
