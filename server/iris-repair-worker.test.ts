@@ -46,13 +46,14 @@ async function login(env: Record<string, unknown>, origin?: string) {
     body: JSON.stringify({ password: testSecret }),
   }), env);
   const body = await response.json();
-  return { response, body } as { response: Response; body: { token: string; expiresIn: number; expiresAt: string } };
+  return { response, body } as { response: Response; body: { ok: boolean; token: string; expiresIn: number; expiresAt: string } };
 }
 
 describe("Iris Worker security repair", () => {
   it("issues an owner bearer token after a valid login", async () => {
     const { response, body } = await login({ IRIS_ACCESS_SECRET: testSecret });
     expect(response.status).toBe(200);
+    expect(body.ok).toBe(true);
     expect(body.token).toMatch(/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/);
     expect(body.token).not.toContain(testSecret);
     expect(body.expiresIn).toBe(6 * 60 * 60);

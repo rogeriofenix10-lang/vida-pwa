@@ -118,7 +118,7 @@ async function login(req, env, origin, allowed) {
   if (typeof parsed.value.password !== "string" || parsed.value.password.length === 0 || !await constantTimeSecretMatch(parsed.value.password, env.IRIS_ACCESS_SECRET)) return json({ error: "Credenciais inválidas." }, 401, origin, allowed);
   const now = Math.floor(Date.now() / 1000);
   const token = await issueSessionToken(env.IRIS_ACCESS_SECRET);
-  return json({ token, tokenType: "Bearer", expiresIn: SESSION_TTL_SECONDS, expiresAt: new Date((now + SESSION_TTL_SECONDS) * 1000).toISOString() }, 200, origin, allowed, { "Cache-Control": "no-store" });
+  return json({ ok: true, token, tokenType: "Bearer", expiresIn: SESSION_TTL_SECONDS, expiresAt: new Date((now + SESSION_TTL_SECONDS) * 1000).toISOString() }, 200, origin, allowed, { "Cache-Control": "no-store" });
 }
 async function authenticatedSubject(req, env, origin, allowed) {
   if (!hasAccessSecret(env)) return { response: json({ error: "Autenticação indisponível." }, 503, origin, allowed) };
