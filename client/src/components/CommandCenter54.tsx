@@ -20,17 +20,24 @@ import { IRIS_STATIC_MODE } from "@/lib/irisRuntime";
 import {
   askIrisWorker,
   askIrisAdvanced,
-  gmailAuthUrl,
   gmailBody,
   gmailHeader,
   gmailMessage,
   gmailMessages,
   gmailStatus,
+  isIrisAccessUnlocked,
+  isIrisRemoteModeEnabled,
+  googleCalendarDelete,
   googleCalendarEvents,
   googleCalendarStatus,
+  googleCalendarUpdate,
   loadIrisData,
   saveIrisData,
+  startGoogleOAuth,
+  type GmailSummary,
+  type GoogleCalendarEvent,
 } from "@/lib/irisWorker";
+import { downloadBlob, readLocal } from "@/lib/irisLocalStore";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -38,6 +45,7 @@ import {
   Bell,
   Check,
   ChevronRight,
+  Download,
   FileText,
   Calendar,
   Layers,
@@ -58,6 +66,7 @@ import {
   X,
   UserRound,
   ExternalLink,
+  RefreshCw,
   MessageCircle,
   BarChart3,
   Wrench,
@@ -115,6 +124,7 @@ type ChatMessage = {
   role: "assistant" | "user";
   text: string;
   attachments?: Array<{ name: string; type: string }>;
+  oauthAction?: "gmail" | "drive" | "calendar";
 };
 
 type AttachmentMimeType =
@@ -126,6 +136,208 @@ type ChatAttachment = {
   kind: "image_url" | "file_url";
 };
 type AiProvider = "manus" | "chatgpt" | "gemini" | "kimi";
+
+type GoogleCalendarDate = NonNullable<GoogleCalendarEvent["start"]> & {
+  timeZone?: string;
+};
+type CalendarEditDraft = {
+  summary: string;
+  description: string;
+  location: string;
+  allDay: boolean;
+  start: string;
+  end: string;
+};
+type AnalysisFinanceRow = {
+  id: string;
+  type: "income" | "expense";
+  description: string;
+  amount: number;
+  status: "open" | "paid" | "overdue";
+  dueAt: string;
+  category: string;
+};
+type AnalysisDocumentRow = { id: string; name: string };
+
+const recordValue = (value: unknown): Record<string, unknown> | null =>
+  value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+
+function normalizeFinanceRow(value: unknown, index: number): AnalysisFinanceRow | null {
+  const row = recordValue(value);
+  if (!row) return null;
+  const rawAmount = row.amount ?? (row.amount_cents != null
+    ? Number(row.amount_cents) / 100
+    : Number.NaN);
+  const amount = Number(rawAmount);
+  if (!Number.isFinite(amount)) return null;
+  const status = String(row.status ?? "open");
+  return {
+    id: String(row.id ?? `sem-id-${index}`),
+    type: String(row.type) === "income" ? "income" : "expense",
+    description: String(row.description ?? "Lançamento sem descrição"),
+    amount: Math.abs(amount),
+    status: status === "paid" || status === "overdue" ? status : "open",
+    dueAt: String(row.dueAt ?? row.due_at ?? ""),
+    category: String(row.category ?? "Outros").trim() || "Outros",
+  };
+}
+
+function normalizeDocumentRow(value: unknown, index: number): AnalysisDocumentRow | null {
+  const row = recordValue(value);
+  if (!row) return null;
+  return {
+    id: String(row.id ?? `sem-id-${index}`),
+    name: String(row.name ?? row.originalName ?? "Documento sem nome"),
+  };
+}
+
+function mergeById<T extends { id: string }>(primary: T[], secondary: T[]): T[] {
+  const rows = new Map<string, T>();
+  for (const row of primary) rows.set(row.id, row);
+  for (const row of secondary) if (!rows.has(row.id)) rows.set(row.id, row);
+  return [...rows.values()];
+}
+
+function normalizeGmailText(value: string): string {
+  return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+}
+
+function selectGmailMessage(messages: GmailSummary[], command: string) {
+  const normalized = normalizeGmailText(command);
+  const ordinal = normalized.match(/\b(?:mensagem|e-?mail)\s*(?:n(?:umero)?\s*)?(\d{1,2})\b/) ??
+    normalized.match(/#(\d{1,2})\b/);
+  const wordOrdinal = normalized.match(/\b(primeir[oa]|segund[oa]|terceir[oa]|ultimo|mais recente|mais novo)\b/)?.[1];
+  const ordinalIndex = ordinal
+    ? Number(ordinal[1]) - 1
+    : wordOrdinal
+      ? ({ primeira: 0, primeiro: 0, segunda: 1, segundo: 1, terceira: 2, terceiro: 2, ultimo: 0, "mais recente": 0, "mais novo": 0 } as Record<string, number>)[wordOrdinal]
+      : undefined;
+  if (ordinalIndex !== undefined) {
+    const target = messages[ordinalIndex];
+    return { target, matches: target ? [target] : [], identified: true };
+  }
+
+  const quoted = command.match(/[\"“]([^\"”]+)[\"”]/)?.[1];
+  const subjectSelector = normalized.match(/\b(?:com assunto|assunto(?: do e-?mail)?|sobre)\s+(.+)$/)?.[1];
+  const senderSelector = normalized.match(/\b(?:remetente|de|do|da)\s+(.+)$/)?.[1];
+  const selector = normalizeGmailText(quoted ?? subjectSelector ?? senderSelector ?? "")
+    .replace(/\b(?:por favor|para mim|o e-?mail|e-?mail|mensagem|gmail)\b/g, " ")
+    .replace(/^[\s:,-]+|[\s?!.]+$/g, "")
+    .trim();
+  if (!selector) return { target: undefined, matches: [], identified: false };
+
+  const matches = messages.filter((message) => {
+    const metadata = [
+      message.subject ?? gmailHeader(message, "Subject"),
+      message.from ?? gmailHeader(message, "From"),
+      message.snippet ?? "",
+    ].map(normalizeGmailText);
+    return metadata.some((value) => value.includes(selector));
+  });
+  return {
+    target: matches.length === 1 ? matches[0] : undefined,
+    matches,
+    identified: true,
+  };
+}
+
+function calendarDateTimeInputValue(date?: GoogleCalendarDate): string {
+  if (!date?.dateTime) return "";
+  const timeZone = date.timeZone ?? (date.dateTime.endsWith("Z") ? "UTC" : undefined);
+  if (timeZone) {
+    try {
+      const parts = new Intl.DateTimeFormat("en-CA", {
+        timeZone,
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+        hourCycle: "h23",
+      }).formatToParts(new Date(date.dateTime));
+      const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+      if (values.year && values.month && values.day && values.hour && values.minute)
+        return `${values.year}-${values.month}-${values.day}T${values.hour}:${values.minute}`;
+    } catch {
+      // Use the source's own wall time below if its timezone cannot be formatted.
+    }
+  }
+  const wallTime = date.dateTime.match(/^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2})/);
+  if (wallTime) return wallTime[1];
+  const parsed = new Date(date.dateTime);
+  if (Number.isNaN(parsed.getTime())) return "";
+  const pad = (number: number) => String(number).padStart(2, "0");
+  return `${parsed.getFullYear()}-${pad(parsed.getMonth() + 1)}-${pad(parsed.getDate())}T${pad(parsed.getHours())}:${pad(parsed.getMinutes())}`;
+}
+
+function dateTimeLocalToIsoInZone(value: string, timeZone: string): string {
+  const match = value.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/);
+  if (!match) throw new Error("Informe uma data e hora válidas.");
+  const [, year, month, day, hour, minute] = match;
+  const desiredWallTime = Date.UTC(Number(year), Number(month) - 1, Number(day), Number(hour), Number(minute));
+  const formatter = new Intl.DateTimeFormat("en-CA", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  });
+  let utcTime = desiredWallTime;
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    const parts = Object.fromEntries(formatter.formatToParts(new Date(utcTime)).map((part) => [part.type, part.value]));
+    const displayedWallTime = Date.UTC(
+      Number(parts.year), Number(parts.month) - 1, Number(parts.day),
+      Number(parts.hour), Number(parts.minute),
+    );
+    const difference = displayedWallTime - utcTime;
+    if (difference === 0) break;
+    utcTime = desiredWallTime - difference;
+  }
+  const check = Object.fromEntries(formatter.formatToParts(new Date(utcTime)).map((part) => [part.type, part.value]));
+  if (`${check.year}-${check.month}-${check.day}T${check.hour}:${check.minute}` !== value)
+    throw new Error("Esse horário não existe no fuso selecionado devido à mudança de horário local.");
+  return new Date(utcTime).toISOString();
+}
+
+function buildCalendarDateTime(value: string, original?: GoogleCalendarDate): GoogleCalendarDate {
+  const timeZone = original?.timeZone ?? (original?.dateTime?.endsWith("Z") ? "UTC" : undefined);
+  if (timeZone) return { dateTime: dateTimeLocalToIsoInZone(value, timeZone), timeZone };
+  const originalOffset = original?.dateTime?.match(/([+-]\d{2}:\d{2})$/)?.[1];
+  if (originalOffset) return { dateTime: `${value}:00${originalOffset}` };
+  const browserTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+  return {
+    dateTime: dateTimeLocalToIsoInZone(value, browserTimeZone),
+    timeZone: browserTimeZone,
+  };
+}
+
+function calendarDateForDisplay(date?: GoogleCalendarDate): string {
+  if (date?.date) {
+    const parsed = new Date(`${date.date}T12:00:00`);
+    return Number.isNaN(parsed.getTime()) ? date.date : parsed.toLocaleDateString("pt-BR");
+  }
+  if (!date?.dateTime) return "Data não informada";
+  const parsed = new Date(date.dateTime);
+  if (Number.isNaN(parsed.getTime())) return date.dateTime;
+  const timeZone = date.timeZone ?? (date.dateTime.endsWith("Z") ? "UTC" : undefined);
+  try {
+    return parsed.toLocaleString("pt-BR", {
+      dateStyle: "short",
+      timeStyle: "short",
+      ...(timeZone ? { timeZone } : {}),
+    });
+  } catch {
+    return parsed.toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
+  }
+}
+
+function formatBrl(value: number): string {
+  return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+}
 
 const initialItems: RadarItem[] = [
   {
@@ -199,6 +411,9 @@ const onboardingSteps = [
 export default function CommandCenter54() {
   const [, navigate] = useLocation();
   const { isAuthenticated } = useAuth();
+  const [remoteAccessReady, setRemoteAccessReady] = useState(
+    () => isIrisRemoteModeEnabled() && isIrisAccessUnlocked(),
+  );
   const [activeView, setActiveView] = useState<ActiveModalView>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [onboarding, setOnboarding] = useState(false);
@@ -230,7 +445,7 @@ export default function CommandCenter54() {
     return [
       {
         role: "assistant",
-        text: "Olá. Sou a Iris IA. Estou no modo conectado e posso consultar Gmail, Calendar e arquivos autorizados quando você pedir. Ações que alteram dados sempre exigem sua confirmação.",
+        text: "Olá. Sou a Iris IA. As consultas remotas só ficam disponíveis após ativar os serviços e desbloquear. Documentos, finanças e catálogo locais continuam funcionando; alterações externas sempre exigem sua confirmação.",
       },
     ];
   });
@@ -246,14 +461,366 @@ export default function CommandCenter54() {
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editText, setEditText] = useState("");
   const [newTaskInput, setNewTaskInput] = useState("");
-  const [calendarEvents, setCalendarEvents] = useState<Array<{ id: string; summary?: string; description?: string; start?: { date?: string; dateTime?: string }; end?: { date?: string; dateTime?: string } }>>([]);
+  const [calendarEvents, setCalendarEvents] = useState<GoogleCalendarEvent[]>([]);
   const [calendarMessage, setCalendarMessage] = useState("Carregando agenda autorizada…");
-  const [analysisRows, setAnalysisRows] = useState<{ finances: Array<Record<string, unknown>>; documents: Array<Record<string, unknown>> }>({ finances: [], documents: [] });
+  const [calendarError, setCalendarError] = useState("");
+  const [calendarLoading, setCalendarLoading] = useState(false);
+  const [calendarActionBusyId, setCalendarActionBusyId] = useState<string | null>(null);
+  const [editingCalendarEventId, setEditingCalendarEventId] = useState<string | null>(null);
+  const [calendarDraft, setCalendarDraft] = useState<CalendarEditDraft | null>(null);
+  const [analysisRows, setAnalysisRows] = useState<{
+    finances: AnalysisFinanceRow[] | null;
+    documents: AnalysisDocumentRow[] | null;
+  }>({ finances: null, documents: null });
+  const [analysisLoading, setAnalysisLoading] = useState(false);
+  const [analysisError, setAnalysisError] = useState("");
+  const [analysisSources, setAnalysisSources] = useState({
+    finances: "Aguardando atualização",
+    documents: "Aguardando atualização",
+  });
+  const [analysisReport, setAnalysisReport] = useState<string | null>(null);
+  const analysisLocalErrorsRef = useRef<string[]>([]);
+  const radarRetryAfterUnlockRef = useRef(false);
+  const calendarRetryAfterUnlockRef = useRef(false);
+  const analysisRetryAfterUnlockRef = useRef({ finances: false, documents: false });
   const lastVoiceCommandRef = useRef({ text: "", at: 0 });
   const lastVoiceErrorRef = useRef({ text: "", at: 0 });
   const chatFeedRef = useRef<HTMLDivElement | null>(null);
   const chatPinnedToBottomRef = useRef(true);
   const { theme, toggleTheme } = useTheme();
+
+  const refreshCalendar = async () => {
+    setCalendarLoading(true);
+    setCalendarError("");
+    setCalendarMessage("Carregando agenda autorizada…");
+    try {
+      const result = await googleCalendarEvents(new Date().toISOString());
+      const events = result.items ?? [];
+      calendarRetryAfterUnlockRef.current = false;
+      setCalendarEvents(events);
+      setCalendarMessage(events.length
+        ? "Agenda sincronizada com o Google Calendar."
+        : "Nenhum compromisso futuro encontrado.");
+      return true;
+    } catch (error) {
+      calendarRetryAfterUnlockRef.current = true;
+      setCalendarMessage("Não foi possível carregar a agenda.");
+      setCalendarError(error instanceof Error
+        ? error.message
+        : "Google Calendar não autorizado ou indisponível.");
+      return false;
+    } finally {
+      setCalendarLoading(false);
+    }
+  };
+
+  const refreshAnalysisData = async () => {
+    setAnalysisLoading(true);
+    setAnalysisError("");
+    const [localFinancesResult, remoteFinancesResult, localDocumentsResult, remoteDocumentsResult] =
+      await Promise.allSettled([
+        "indexedDB" in window
+          ? readLocal<unknown[]>("irisFinances", [])
+          : Promise.reject(new Error("IndexedDB não disponível")),
+        loadIrisData("finances"),
+        "indexedDB" in window
+          ? readLocal<unknown[]>("irisDocuments", [])
+          : Promise.reject(new Error("IndexedDB não disponível")),
+        loadIrisData("documents"),
+      ]);
+    analysisRetryAfterUnlockRef.current = {
+      finances: remoteFinancesResult.status === "rejected",
+      documents: remoteDocumentsResult.status === "rejected",
+    };
+
+    const localFinances = localFinancesResult.status === "fulfilled"
+      ? localFinancesResult.value.map(normalizeFinanceRow).filter((row): row is AnalysisFinanceRow => row !== null)
+      : null;
+    const remoteFinances = remoteFinancesResult.status === "fulfilled"
+      ? remoteFinancesResult.value.items
+          .map((row, index) => {
+            const payload = recordValue(row.payload) ?? {};
+            return normalizeFinanceRow({ ...payload, ...row }, index);
+          })
+          .filter((row): row is AnalysisFinanceRow => row !== null)
+      : null;
+    const localDocuments = localDocumentsResult.status === "fulfilled"
+      ? localDocumentsResult.value.map(normalizeDocumentRow).filter((row): row is AnalysisDocumentRow => row !== null)
+      : null;
+    const remoteDocuments = remoteDocumentsResult.status === "fulfilled"
+      ? remoteDocumentsResult.value.items
+          .map((row, index) => {
+            const payload = recordValue(row.payload) ?? {};
+            return normalizeDocumentRow({ ...payload, ...row }, index);
+          })
+          .filter((row): row is AnalysisDocumentRow => row !== null)
+      : null;
+
+    setAnalysisRows({
+      finances: localFinances !== null || remoteFinances !== null
+        ? mergeById(localFinances ?? [], remoteFinances ?? [])
+        : null,
+      documents: localDocuments !== null || remoteDocuments !== null
+        ? mergeById(localDocuments ?? [], remoteDocuments ?? [])
+        : null,
+    });
+    const sourceLabel = (local: boolean, remote: boolean) => local
+      ? remote ? "dispositivo local + D1 (prioridade local)" : "dispositivo local; D1 indisponível"
+      : remote ? "D1 como fallback; leitura local indisponível" : "indisponível";
+    setAnalysisSources({
+      finances: sourceLabel(localFinances !== null, remoteFinances !== null),
+      documents: sourceLabel(localDocuments !== null, remoteDocuments !== null),
+    });
+
+    const failures: string[] = [];
+    analysisLocalErrorsRef.current = [];
+    if (localFinancesResult.status === "rejected") {
+      analysisLocalErrorsRef.current.push("Finanças locais indisponíveis");
+      failures.push("Finanças locais indisponíveis");
+    }
+    if (remoteFinancesResult.status === "rejected")
+      failures.push("D1 de finanças indisponível; dados locais mantidos");
+    if (localDocumentsResult.status === "rejected") {
+      analysisLocalErrorsRef.current.push("Documentos locais indisponíveis");
+      failures.push("Documentos locais indisponíveis");
+    }
+    if (remoteDocumentsResult.status === "rejected")
+      failures.push("D1 de documentos indisponível; dados locais mantidos");
+    setAnalysisError(failures.join(". "));
+    setAnalysisLoading(false);
+  };
+
+  const retryFailedAnalysisReads = async () => {
+    const retry = { ...analysisRetryAfterUnlockRef.current };
+    if ((!retry.finances && !retry.documents) || !isIrisRemoteModeEnabled() || !isIrisAccessUnlocked()) return;
+    setAnalysisLoading(true);
+    const [financesResult, documentsResult] = await Promise.all([
+      retry.finances
+        ? loadIrisData("finances").then(
+            (value) => ({ status: "fulfilled" as const, value }),
+            (reason) => ({ status: "rejected" as const, reason }),
+          )
+        : Promise.resolve(null),
+      retry.documents
+        ? loadIrisData("documents").then(
+            (value) => ({ status: "fulfilled" as const, value }),
+            (reason) => ({ status: "rejected" as const, reason }),
+          )
+        : Promise.resolve(null),
+    ]);
+
+    const remoteFinances = financesResult?.status === "fulfilled"
+      ? financesResult.value.items
+          .map((row, index) => normalizeFinanceRow({ ...(recordValue(row.payload) ?? {}), ...row }, index))
+          .filter((row): row is AnalysisFinanceRow => row !== null)
+      : null;
+    const remoteDocuments = documentsResult?.status === "fulfilled"
+      ? documentsResult.value.items
+          .map((row, index) => normalizeDocumentRow({ ...(recordValue(row.payload) ?? {}), ...row }, index))
+          .filter((row): row is AnalysisDocumentRow => row !== null)
+      : null;
+
+    setAnalysisRows((current) => ({
+      finances: remoteFinances === null ? current.finances : mergeById(current.finances ?? [], remoteFinances),
+      documents: remoteDocuments === null ? current.documents : mergeById(current.documents ?? [], remoteDocuments),
+    }));
+    setAnalysisSources((current) => ({
+      finances: remoteFinances === null
+        ? current.finances
+        : current.finances.includes("dispositivo local")
+          ? "dispositivo local + D1 (prioridade local)"
+          : "D1 como fallback; leitura local indisponível",
+      documents: remoteDocuments === null
+        ? current.documents
+        : current.documents.includes("dispositivo local")
+          ? "dispositivo local + D1 (prioridade local)"
+          : "D1 como fallback; leitura local indisponível",
+    }));
+
+    const failures: string[] = [...analysisLocalErrorsRef.current];
+    if (retry.finances && financesResult?.status === "rejected") failures.push("D1 de finanças indisponível; dados locais mantidos");
+    if (retry.documents && documentsResult?.status === "rejected") failures.push("D1 de documentos indisponível; dados locais mantidos");
+    analysisRetryAfterUnlockRef.current = {
+      finances: retry.finances && financesResult?.status === "rejected",
+      documents: retry.documents && documentsResult?.status === "rejected",
+    };
+    setAnalysisError(failures.join(". "));
+    setAnalysisLoading(false);
+  };
+
+  const beginCalendarEdit = (event: GoogleCalendarEvent) => {
+    const allDay = Boolean(event.start?.date);
+    const eventStart = event.start as GoogleCalendarDate | undefined;
+    const eventEnd = event.end as GoogleCalendarDate | undefined;
+    const eventTimeZone = eventStart?.timeZone ?? eventEnd?.timeZone;
+    setCalendarError("");
+    setCalendarDraft({
+      summary: event.summary ?? "",
+      description: event.description ?? "",
+      location: event.location ?? "",
+      allDay,
+      start: allDay
+        ? event.start?.date ?? ""
+        : calendarDateTimeInputValue(eventStart ? { ...eventStart, timeZone: eventStart.timeZone ?? eventTimeZone } : undefined),
+      end: allDay
+        ? event.end?.date ?? ""
+        : calendarDateTimeInputValue(eventEnd ? { ...eventEnd, timeZone: eventEnd.timeZone ?? eventTimeZone } : undefined),
+    });
+    setEditingCalendarEventId(event.id);
+  };
+
+  const changeCalendarAllDay = (allDay: boolean) => {
+    setCalendarDraft((current) => {
+      if (!current) return current;
+      const dateOnly = (value: string) => value.split("T")[0] ?? "";
+      const withTime = (value: string, time: string) => value.includes("T")
+        ? value
+        : value ? `${value}T${time}` : "";
+      return {
+        ...current,
+        allDay,
+        start: allDay ? dateOnly(current.start) : withTime(current.start, "09:00"),
+        end: allDay ? dateOnly(current.end) : withTime(current.end, "10:00"),
+      };
+    });
+  };
+
+  const saveCalendarEdit = async () => {
+    if (!calendarDraft || !editingCalendarEventId) return;
+    const event = calendarEvents.find((candidate) => candidate.id === editingCalendarEventId);
+    if (!event) return;
+    const summary = calendarDraft.summary.trim();
+    if (!summary || !calendarDraft.start || !calendarDraft.end) {
+      setCalendarError("Informe o título, a data/hora inicial e a data/hora final.");
+      return;
+    }
+    if (calendarDraft.end < calendarDraft.start) {
+      setCalendarError("A data/hora final precisa ser posterior à inicial.");
+      return;
+    }
+
+    let start: GoogleCalendarDate;
+    let end: GoogleCalendarDate;
+    const eventStart = event.start as GoogleCalendarDate | undefined;
+    const eventEnd = event.end as GoogleCalendarDate | undefined;
+    const eventTimeZone = eventStart?.timeZone ?? eventEnd?.timeZone;
+    try {
+      start = calendarDraft.allDay
+        ? { date: calendarDraft.start }
+        : buildCalendarDateTime(calendarDraft.start, eventStart ? { ...eventStart, timeZone: eventStart.timeZone ?? eventTimeZone } : undefined);
+      end = calendarDraft.allDay
+        ? { date: calendarDraft.end }
+        : buildCalendarDateTime(calendarDraft.end, eventEnd ? { ...eventEnd, timeZone: eventEnd.timeZone ?? eventTimeZone } : undefined);
+    } catch (error) {
+      setCalendarError(error instanceof Error ? error.message : "Não foi possível converter a data no fuso original.");
+      return;
+    }
+
+    const payload = {
+      summary,
+      description: calendarDraft.description.trim(),
+      location: calendarDraft.location.trim(),
+      start,
+      end,
+    };
+    const displayedDate = calendarDraft.allDay
+      ? `${calendarDraft.start} até ${calendarDraft.end} (dia inteiro)`
+      : `${calendarDraft.start.replace("T", " ")} até ${calendarDraft.end.replace("T", " ")}`;
+    if (!window.confirm(
+      `Confirmar atualização deste evento no Google Calendar?\n\nTítulo: ${summary}\nData: ${displayedDate}\n\nO Calendar receberá PATCH somente após esta confirmação.`,
+    )) return;
+
+    setCalendarActionBusyId(event.id);
+    setCalendarError("");
+    try {
+      const updated = await googleCalendarUpdate(event.id, payload, true);
+      setCalendarEvents((current) => current.map((candidate) =>
+        candidate.id === event.id ? updated : candidate,
+      ));
+      setEditingCalendarEventId(null);
+      setCalendarDraft(null);
+      setCalendarMessage("Evento atualizado no Google Calendar.");
+      await refreshCalendar();
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : "Falha ao atualizar o evento.";
+      setCalendarMessage("A agenda não foi alterada.");
+      setCalendarError(`${detail} Aniversários e eventos fromGmail podem ser somente leitura; nenhuma alteração local foi aplicada.`);
+    } finally {
+      setCalendarActionBusyId(null);
+    }
+  };
+
+  const deleteCalendarEvent = async (event: GoogleCalendarEvent) => {
+    const title = event.summary?.trim() || "Compromisso sem título";
+    const start = calendarDateForDisplay(event.start as GoogleCalendarDate | undefined);
+    const end = calendarDateForDisplay(event.end as GoogleCalendarDate | undefined);
+    if (!window.confirm(
+      `Confirmar exclusão deste evento do Google Calendar?\n\nTítulo: ${title}\nData: ${start}${end !== "Data não informada" ? ` até ${end}` : ""}\n\nA exclusão só será solicitada após esta confirmação.`,
+    )) return;
+
+    setCalendarActionBusyId(event.id);
+    setCalendarError("");
+    try {
+      await googleCalendarDelete(event.id, true);
+      setCalendarEvents((current) => current.filter((candidate) => candidate.id !== event.id));
+      setEditingCalendarEventId(null);
+      setCalendarDraft(null);
+      setCalendarMessage("Evento excluído do Google Calendar.");
+      await refreshCalendar();
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : "Falha ao excluir o evento.";
+      setCalendarMessage("A agenda não foi alterada.");
+      setCalendarError(`${detail} Aniversários e eventos fromGmail podem ser somente leitura; nada foi removido da lista.`);
+    } finally {
+      setCalendarActionBusyId(null);
+    }
+  };
+
+  const generateLocalAnalysisReport = () => {
+    const finances = analysisRows.finances;
+    const documents = analysisRows.documents;
+    const income = finances?.filter((row) => row.type === "income").reduce((sum, row) => sum + row.amount, 0) ?? null;
+    const expenses = finances?.filter((row) => row.type === "expense").reduce((sum, row) => sum + row.amount, 0) ?? null;
+    const categories = new Map<string, { income: number; expense: number }>();
+    for (const row of finances ?? []) {
+      const totals = categories.get(row.category) ?? { income: 0, expense: 0 };
+      totals[row.type] += row.amount;
+      categories.set(row.category, totals);
+    }
+    const today = new Date().toISOString().slice(0, 10);
+    const openEntries = finances?.filter((row) => row.status !== "paid") ?? null;
+    const overdueEntries = finances?.filter((row) =>
+      row.status === "overdue" || (row.status === "open" && row.dueAt && row.dueAt < today),
+    ) ?? null;
+    const radarPending = items.filter((item) => item.status !== "completed").length;
+    const lines = [
+      "IRIS — RESUMO LOCAL VERIFICÁVEL",
+      `Gerado em: ${new Date().toLocaleString("pt-BR")}`,
+      "Este relatório foi calculado neste dispositivo a partir dos lançamentos disponíveis; nenhuma informação pessoal foi enviada à IA.",
+      `Fonte de finanças: ${analysisSources.finances}.`,
+      `Fonte de documentos: ${analysisSources.documents}.`,
+      "",
+      `Lançamentos financeiros: ${finances === null ? "indisponível" : finances.length}`,
+      `Renda/receitas: ${income === null ? "indisponível" : formatBrl(income)}`,
+      `Despesas: ${expenses === null ? "indisponível" : formatBrl(expenses)}`,
+      `Pendências financeiras em aberto: ${openEntries === null ? "indisponível" : openEntries.length}`,
+      `Pendências financeiras vencidas: ${overdueEntries === null ? "indisponível" : overdueEntries.length}`,
+      `Documentos: ${documents === null ? "indisponível" : documents.length}`,
+      `Pendências exibidas no Radar: ${radarPending} (lista atual; pode incluir exemplos no modo de demonstração).`,
+      "",
+      "Somas por categoria:",
+      ...(finances === null
+        ? ["- Indisponíveis: a fonte de lançamentos não pôde ser lida."]
+        : categories.size
+          ? [...categories.entries()]
+              .sort(([left], [right]) => left.localeCompare(right, "pt-BR"))
+              .map(([category, totals]) => `- ${category}: receitas ${formatBrl(totals.income)}; despesas ${formatBrl(totals.expense)}; total ${formatBrl(totals.income + totals.expense)}.`)
+          : ["- Nenhum lançamento financeiro disponível para somar."]),
+      "",
+      "Nota: é um resumo determinístico dos registros carregados, não uma análise completa por IA.",
+    ];
+    setAnalysisReport(lines.join("\n"));
+  };
 
   useEffect(() => {
     try {
@@ -275,48 +842,66 @@ export default function CommandCenter54() {
     return () => window.cancelAnimationFrame(frame);
   }, [chat, isProcessing]);
 
+  const refreshRadar = async () => {
+    try {
+      const { items: rows } = await loadIrisData("radar");
+      radarRetryAfterUnlockRef.current = false;
+      if (!rows.length) return;
+      const remoteItems: RadarItem[] = rows.map((row, index) => ({
+        id: Number(row.id) || Date.now() + index,
+        label: String(row.label ?? ""),
+        detail: String(row.detail ?? ""),
+        date: row.due_at ? new Date(String(row.due_at)).toLocaleDateString("pt-BR") : "em dia",
+        priority: "normal",
+        action: "Continuar acompanhamento",
+        dueAt: row.due_at ? String(row.due_at) : null,
+        status: row.status === "completed" ? "completed" : "pending",
+        category: (String(row.category ?? "Geral") as RadarCategory),
+      }));
+      setItems(remoteItems);
+      setRadarFallback(false);
+    } catch {
+      radarRetryAfterUnlockRef.current = true;
+      // O modo local continua disponível quando o Worker está bloqueado ou indisponível.
+    }
+  };
+
   useEffect(() => {
-    let cancelled = false;
-    void loadIrisData("radar")
-      .then(({ items: rows }) => {
-        if (cancelled || !rows.length) return;
-        const remoteItems: RadarItem[] = rows.map((row, index) => ({
-          id: Number(row.id) || Date.now() + index,
-          label: String(row.label ?? ""),
-          detail: String(row.detail ?? ""),
-          date: row.due_at ? new Date(String(row.due_at)).toLocaleDateString("pt-BR") : "em dia",
-          priority: "normal",
-          action: "Continuar acompanhamento",
-          dueAt: row.due_at ? String(row.due_at) : null,
-          status: row.status === "completed" ? "completed" : "pending",
-          category: (String(row.category ?? "Geral") as RadarCategory),
-        }));
-        setItems(remoteItems);
-        setRadarFallback(false);
-      })
-      .catch(() => {
-        // O modo local continua disponível quando o Worker está indisponível.
-      });
-    return () => {
-      cancelled = true;
-    };
+    void refreshRadar();
   }, []);
 
   useEffect(() => {
-    let active = true;
-    void googleCalendarEvents(new Date().toISOString())
-      .then((result) => {
-        if (!active) return;
-        const events = result.items ?? [];
-        setCalendarEvents(events);
-        setCalendarMessage(events.length ? "Agenda sincronizada com o Google Calendar." : "Nenhum compromisso futuro encontrado.");
-      })
-      .catch(() => { if (active) setCalendarMessage("Google Calendar não autorizado ou indisponível. Autorize em Google Workspace."); });
-    void Promise.all([loadIrisData("finances"), loadIrisData("documents")])
-      .then(([finances, documents]) => { if (active) setAnalysisRows({ finances: finances.items, documents: documents.items }); })
-      .catch(() => undefined);
-    return () => { active = false; };
-  }, []);
+    if (activeView === "agenda") void refreshCalendar();
+    if (activeView === "analises") {
+      setAnalysisReport(null);
+      void refreshAnalysisData();
+    }
+  }, [activeView]);
+
+  useEffect(() => {
+    const onRemoteAccessChanged = () => {
+      const ready = isIrisRemoteModeEnabled() && isIrisAccessUnlocked();
+      setRemoteAccessReady(ready);
+      if (!ready) return;
+      if (radarRetryAfterUnlockRef.current) {
+        radarRetryAfterUnlockRef.current = false;
+        void refreshRadar();
+      }
+      if (activeView === "agenda" && calendarRetryAfterUnlockRef.current) {
+        calendarRetryAfterUnlockRef.current = false;
+        void refreshCalendar();
+      }
+      if (activeView === "analises" && (analysisRetryAfterUnlockRef.current.finances || analysisRetryAfterUnlockRef.current.documents)) {
+        void retryFailedAnalysisReads();
+      }
+    };
+    window.addEventListener("iris-access-changed", onRemoteAccessChanged);
+    window.addEventListener("iris-mode-changed", onRemoteAccessChanged);
+    return () => {
+      window.removeEventListener("iris-access-changed", onRemoteAccessChanged);
+      window.removeEventListener("iris-mode-changed", onRemoteAccessChanged);
+    };
+  }, [activeView]);
 
   const [aiProvider, setAiProvider] = useState<AiProvider>(() => {
     try {
@@ -330,15 +915,15 @@ export default function CommandCenter54() {
   });
 
   const profile = trpc.profile.me.useQuery(undefined, {
-    enabled: isAuthenticated,
+    enabled: isAuthenticated && remoteAccessReady,
     retry: false,
   });
   const preference = trpc.ai.preference.useQuery(undefined, {
-    enabled: isAuthenticated,
+    enabled: isAuthenticated && remoteAccessReady,
     retry: false,
   });
   const radarQuery = trpc.radar.list.useQuery(undefined, {
-    enabled: isAuthenticated,
+    enabled: isAuthenticated && remoteAccessReady,
     retry: false,
   });
   const savePreference = trpc.ai.setPreference.useMutation();
@@ -350,16 +935,16 @@ export default function CommandCenter54() {
   const suggest = trpc.ai.suggest.useMutation();
   const uploadAttachment = trpc.ai.upload.useMutation();
   const voiceProfile = trpc.voice.getProfile.useQuery(undefined, {
-    enabled: isAuthenticated,
+    enabled: isAuthenticated && remoteAccessReady,
     retry: false,
   });
   const updateVoiceProfile = trpc.voice.updateProfile.useMutation();
   const userFiles = trpc.documents.list.useQuery(undefined, {
-    enabled: isAuthenticated,
+    enabled: isAuthenticated && remoteAccessReady,
     retry: false,
   });
   const costStatus = trpc.control.costStatus.useQuery(undefined, {
-    enabled: isAuthenticated,
+    enabled: isAuthenticated && remoteAccessReady,
     retry: false,
   });
 
@@ -382,7 +967,7 @@ export default function CommandCenter54() {
   }, []);
 
   useEffect(() => {
-    if (!isAuthenticated) {
+    if (!isAuthenticated || !remoteAccessReady) {
       setRadarFallback(false);
       return;
     }
@@ -411,10 +996,10 @@ export default function CommandCenter54() {
       setRadarFallback(true);
       setItems(initialItems);
     }
-  }, [isAuthenticated, radarQuery.data, radarQuery.isError]);
+  }, [isAuthenticated, remoteAccessReady, radarQuery.data, radarQuery.isError]);
 
   useEffect(() => {
-    if (!isAuthenticated || !radarQuery.isLoading) return;
+    if (!isAuthenticated || !remoteAccessReady || !radarQuery.isLoading) return;
     const timer = window.setTimeout(() => {
       if (!radarQuery.data) {
         setRadarFallback(true);
@@ -422,7 +1007,7 @@ export default function CommandCenter54() {
       }
     }, 4000);
     return () => window.clearTimeout(timer);
-  }, [isAuthenticated, radarQuery.isLoading, radarQuery.data]);
+  }, [isAuthenticated, remoteAccessReady, radarQuery.isLoading, radarQuery.data]);
 
   const categoryFor = (item: RadarItem): RadarCategory => {
     if (item.category && item.category !== "Todas Categorias")
@@ -586,7 +1171,7 @@ export default function CommandCenter54() {
       try {
         localStorage.setItem("iris-voice-enabled", "false");
       } catch {}
-      if (isAuthenticated) {
+      if (isAuthenticated && remoteAccessReady) {
         updateVoiceProfile.mutate({
           enabled: false,
           wakeWord: voiceProfile.data?.wakeWord ?? "iris",
@@ -620,7 +1205,7 @@ export default function CommandCenter54() {
       ]);
     }
 
-    if (isAuthenticated) {
+    if (isAuthenticated && remoteAccessReady) {
       updateVoiceProfile.mutate({
         enabled: true,
         wakeWord: voiceProfile.data?.wakeWord ?? "iris",
@@ -650,6 +1235,7 @@ export default function CommandCenter54() {
     try {
       if (
         isAuthenticated &&
+        remoteAccessReady &&
         pendingSuggestion.proposalId &&
         pendingSuggestion.confirmationToken
       ) {
@@ -723,46 +1309,68 @@ export default function CommandCenter54() {
         return;
       }
 
-      const isGmailCommand = /(e-?mail|gmail|remetente|título|titulo)/i.test(text);
+      const isGmailCommand = /(e-?mail|gmail|mensage(m|ns)|remetente|título|titulo)/i.test(text);
       if (isGmailCommand) {
+        if (!isIrisRemoteModeEnabled()) {
+          const reply = "O modo Demonstração está ativo. Nenhuma consulta Gmail foi enviada; ative o acesso remoto e desbloqueie os serviços para continuar.";
+          setChat((current) => [...current, { role: "assistant", text: reply }]);
+          if (voiceEnabled) voice.speak(reply);
+          return;
+        }
+        if (!isIrisAccessUnlocked()) {
+          const reply = "Os serviços remotos estão bloqueados. Desbloqueie o acesso e repita o pedido; nenhuma leitura Gmail foi feita.";
+          setChat((current) => [...current, { role: "assistant", text: reply }]);
+          if (voiceEnabled) voice.speak(reply);
+          return;
+        }
         const status = await gmailStatus();
         if (!status.authorized) {
-          const reply = `O Gmail ainda não está autorizado. Abra este endereço para autorizar somente leitura: ${gmailAuthUrl()}`;
-          setChat((current) => [...current, { role: "assistant", text: reply }]);
+          const reply = "O Gmail ainda não está conectado. Você pode iniciar a autorização somente leitura usando o botão abaixo.";
+          setChat((current) => [...current, { role: "assistant", text: reply, oauthAction: "gmail" }]);
           if (voiceEnabled) voice.speak(reply);
           return;
         }
         const listing = await gmailMessages();
-        const ids = (listing.messages ?? []).slice(0, 20).map((item) => item.id);
-        if (/quantos|quantidade|número|numero/i.test(text)) {
-          const reply = `Você recebeu aproximadamente ${listing.resultSizeEstimate ?? ids.length} e-mails. A consulta atual mostra até ${ids.length} mensagens.`;
+        const messages = (listing.messages ?? []).slice(0, 20);
+        const isCountRequest = /quantos|quantas|quantidade|número|numero/i.test(text);
+        if (isCountRequest) {
+          const count = listing.resultSizeEstimate ?? messages.length;
+          const reply = `O Gmail estima ${count} e-mails. A consulta exibiu metadados de até ${messages.length} mensagens; nenhum corpo foi carregado.`;
           setChat((current) => [...current, { role: "assistant", text: reply }]);
           if (voiceEnabled) voice.speak(reply);
           return;
         }
-        const details = await Promise.all(ids.map((id) => gmailMessage(id)));
-        const query = text
-          .replace(/.*e-?mail\s*/i, "")
-          .replace(/^(de|do|da|com assunto|sobre)\s+/i, "")
-          .trim();
-        const target = /leia|ler|leitura/i.test(text)
-          ? details.find((message) => {
-              if (!query) return false;
-              const subject = gmailHeader(message, "Subject").toLowerCase();
-              const from = gmailHeader(message, "From").toLowerCase();
-              return subject.includes(query.toLowerCase()) || from.includes(query.toLowerCase());
-            })
-          : null;
-        if (target) {
+
+        const formatSummary = (message: GmailSummary, index: number) => {
+          const subject = (message.subject || gmailHeader(message, "Subject")).replace(/\s+/g, " ");
+          const from = (message.from || gmailHeader(message, "From")).replace(/\s+/g, " ");
+          const snippet = message.snippet?.replace(/\s+/g, " ").trim();
+          return `${index + 1}. ${subject} — ${from}${snippet ? `\n   ${snippet.slice(0, 180)}${snippet.length > 180 ? "…" : ""}` : ""}`;
+        };
+        const isReadRequest = /\b(leia|ler|leitura|conteúdo|conteudo|corpo|texto completo)\b/i.test(text);
+        if (isReadRequest) {
+          const selection = selectGmailMessage(messages, text);
+          if (!selection.target) {
+            const candidates = selection.matches.length ? selection.matches : messages;
+            const explanation = selection.matches.length > 1
+              ? "Encontrei mais de uma mensagem correspondente. Indique um único número da lista para ler."
+              : selection.identified
+                ? "Não encontrei uma mensagem única com esse identificador. Escolha uma das mensagens abaixo."
+                : "Para ler uma mensagem, indique o assunto/remetente ou um número desta lista. Nenhum corpo foi carregado.";
+            const reply = `${explanation}${candidates.length ? `\n${candidates.slice(0, 10).map(formatSummary).join("\n")}` : "\nNão há mensagens disponíveis na consulta atual."}`;
+            setChat((current) => [...current, { role: "assistant", text: reply }]);
+            if (voiceEnabled) voice.speak(reply);
+            return;
+          }
+          const target = await gmailMessage(selection.target.id);
           const reply = `Assunto: ${gmailHeader(target, "Subject")}\nRemetente: ${gmailHeader(target, "From")}\n\n${gmailBody(target)}`;
           setChat((current) => [...current, { role: "assistant", text: reply }]);
           if (voiceEnabled) voice.speak(reply);
           return;
         }
-        const reply = details.length
-          ? details
-              .map((message, index) => `${index + 1}. ${gmailHeader(message, "Subject")} — ${gmailHeader(message, "From")}`)
-              .join("\n")
+
+        const reply = messages.length
+          ? `Metadados das mensagens Gmail mais recentes (até ${messages.length}; sem carregar corpos):\n${messages.map(formatSummary).join("\n")}`
           : "Não encontrei e-mails na consulta atual.";
         setChat((current) => [...current, { role: "assistant", text: reply }]);
         if (voiceEnabled) voice.speak(reply);
@@ -814,6 +1422,22 @@ export default function CommandCenter54() {
     }
   };
 
+  const connectChatGoogle = async (product: "gmail" | "drive" | "calendar") => {
+    if (!isIrisRemoteModeEnabled() || !isIrisAccessUnlocked()) {
+      setChat((current) => [...current, {
+        role: "assistant",
+        text: "Desbloqueie o acesso remoto antes de iniciar a autorização Google. Nenhuma solicitação foi enviada.",
+      }]);
+      return;
+    }
+    try {
+      await startGoogleOAuth(product);
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : "Não foi possível iniciar a autorização Google.";
+      setChat((current) => [...current, { role: "assistant", text: detail }]);
+    }
+  };
+
   const sendMessage = async (preset?: string) => {
     const text = (preset ?? commandText).trim();
     if (!text && attachments.length === 0) return;
@@ -834,6 +1458,19 @@ export default function CommandCenter54() {
 
     // Ao enviar comando, abre automaticamente a visualização do Assistente para leitura
     setActiveView("assistente");
+
+    if (!isIrisRemoteModeEnabled() || !isIrisAccessUnlocked()) {
+      const isLocalReminder = /(vence|vencimento|pagar|lembrete|lembrar|dia \d{1,2}|amanhã|amanha|tarefa|comprar)/i.test(text);
+      const localTask = !selectedAttachments.length && isLocalReminder
+        ? runDemoCommand(text)
+        : null;
+      if (localTask) setItems((current) => [localTask, ...current]);
+      const remoteBlocked = isIrisRemoteModeEnabled();
+      const reply = `${remoteBlocked ? "Serviços remotos bloqueados" : "Modo Demonstração"}: nenhum texto${selectedAttachments.length ? " ou imagem" : ""} foi enviado. ${localTask ? "O lembrete foi mantido somente neste dispositivo." : remoteBlocked ? "Desbloqueie e repita a ação quando quiser." : "Os recursos locais continuam disponíveis."}`;
+      setChat((current) => [...current, { role: "assistant", text: reply }]);
+      setIrisState("idle");
+      return;
+    }
 
     if (IRIS_STATIC_MODE) {
       const imageAttachment = selectedAttachments.find((att) => att.kind === "image_url");
@@ -1407,6 +2044,17 @@ export default function CommandCenter54() {
                         )}
                       </div>
                       <div className="iris54-chat-text">{message.text}</div>
+                      {message.role === "assistant" && message.oauthAction && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          disabled={!remoteAccessReady}
+                          onClick={() => void connectChatGoogle(message.oauthAction!)}
+                        >
+                          Conectar {message.oauthAction === "gmail" ? "Gmail" : message.oauthAction === "drive" ? "Google Drive" : "Google Calendar"}
+                          <ExternalLink size={15} />
+                        </Button>
+                      )}
                     </div>
                   ))}
                   {(suggest.isPending ||
@@ -1729,24 +2377,146 @@ export default function CommandCenter54() {
                       IA.
                     </p>
                   </div>
-                  <button
-                    type="button"
-                    className="iris54-close-btn"
-                    onClick={() => setActiveView(null)}
-                    aria-label="Fechar"
-                  >
-                    <X size={18} />
-                  </button>
+                  <div className="iris54-calendar-header-actions">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => void refreshCalendar()}
+                      disabled={calendarLoading || calendarActionBusyId !== null}
+                      aria-label="Atualizar agenda"
+                    >
+                      <RefreshCw size={15} className={calendarLoading ? "animate-spin" : ""} />
+                      Atualizar
+                    </Button>
+                    <button
+                      type="button"
+                      className="iris54-close-btn"
+                      onClick={() => setActiveView(null)}
+                      aria-label="Fechar"
+                    >
+                      <X size={18} />
+                    </button>
+                  </div>
                 </div>
 
+                {calendarMessage && <p className="iris54-source-message" role="status">{calendarMessage}</p>}
+                {calendarError && <p className="iris54-source-error" role="alert">{calendarError}</p>}
                 <div className="iris54-feature-grid">
                   {calendarEvents.length ? calendarEvents.slice(0, 12).map((event) => (
-                    <div className="iris54-feature-card" key={event.id}>
+                    <article className="iris54-feature-card iris54-calendar-event-card" key={event.id}>
                       <span className="iris54-priority-badge" style={{ background: "rgba(59, 130, 246, 0.2)", color: "#93c5fd" }}>CALENDAR</span>
-                      <strong>{event.summary || "Compromisso sem título"}</strong>
-                      <p>{event.start?.dateTime || event.start?.date || "Data não informada"}{event.description ? ` · ${event.description}` : ""}</p>
+                      {editingCalendarEventId === event.id && calendarDraft ? (
+                        <div className="iris54-calendar-edit-form">
+                          <label className="iris54-calendar-field">
+                            Título
+                            <input
+                              value={calendarDraft.summary}
+                              onChange={(e) => setCalendarDraft((current) => current ? { ...current, summary: e.target.value } : current)}
+                              autoComplete="off"
+                            />
+                          </label>
+                          <label className="iris54-calendar-field">
+                            Descrição
+                            <textarea
+                              rows={3}
+                              value={calendarDraft.description}
+                              onChange={(e) => setCalendarDraft((current) => current ? { ...current, description: e.target.value } : current)}
+                            />
+                          </label>
+                          <label className="iris54-calendar-field">
+                            Local
+                            <input
+                              value={calendarDraft.location}
+                              onChange={(e) => setCalendarDraft((current) => current ? { ...current, location: e.target.value } : current)}
+                              autoComplete="off"
+                            />
+                          </label>
+                          <label className="iris54-calendar-all-day">
+                            <input
+                              type="checkbox"
+                              checked={calendarDraft.allDay}
+                              onChange={(e) => changeCalendarAllDay(e.target.checked)}
+                            />
+                            Evento de dia inteiro
+                          </label>
+                          <div className="iris54-calendar-date-fields">
+                            <label className="iris54-calendar-field">
+                              Início
+                              <input
+                                type={calendarDraft.allDay ? "date" : "datetime-local"}
+                                value={calendarDraft.start}
+                                onChange={(e) => setCalendarDraft((current) => current ? { ...current, start: e.target.value } : current)}
+                              />
+                            </label>
+                            <label className="iris54-calendar-field">
+                              Fim{calendarDraft.allDay ? " (data exclusiva no Google Calendar)" : ""}
+                              <input
+                                type={calendarDraft.allDay ? "date" : "datetime-local"}
+                                value={calendarDraft.end}
+                                onChange={(e) => setCalendarDraft((current) => current ? { ...current, end: e.target.value } : current)}
+                              />
+                            </label>
+                          </div>
+                          <p className="iris54-calendar-timezone-note">
+                            Horários usam o fuso original do evento quando disponível; em eventos de dia inteiro, a data final é exclusiva.
+                          </p>
+                          <div className="iris54-calendar-event-actions">
+                            <Button
+                              type="button"
+                              onClick={() => void saveCalendarEdit()}
+                              disabled={calendarActionBusyId === event.id || calendarLoading}
+                            >
+                              {calendarActionBusyId === event.id ? "Salvando…" : "Salvar alteração"}
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              onClick={() => { setEditingCalendarEventId(null); setCalendarDraft(null); setCalendarError(""); }}
+                              disabled={calendarActionBusyId === event.id}
+                            >
+                              Cancelar
+                            </Button>
+                          </div>
+                        </div>
+                      ) : (
+                        <>
+                          <strong>{event.summary || "Compromisso sem título"}</strong>
+                          <p>
+                            {calendarDateForDisplay(event.start as GoogleCalendarDate | undefined)}
+                            {event.end ? ` até ${calendarDateForDisplay(event.end as GoogleCalendarDate)}` : ""}
+                          </p>
+                          {event.location && <p>Local: {event.location}</p>}
+                          {event.description && <p>{event.description}</p>}
+                          <div className="iris54-calendar-event-actions">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              onClick={() => beginCalendarEdit(event)}
+                              disabled={calendarActionBusyId !== null || calendarLoading}
+                              aria-label={`Editar ${event.summary || "compromisso"}`}
+                            >
+                              <Pencil size={14} /> Editar
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              onClick={() => void deleteCalendarEvent(event)}
+                              disabled={calendarActionBusyId !== null || calendarLoading}
+                              aria-label={`Excluir ${event.summary || "compromisso"}`}
+                            >
+                              {calendarActionBusyId === event.id ? <Loader2 size={14} className="animate-spin" /> : <X size={14} />}
+                              {calendarActionBusyId === event.id ? "Excluindo…" : "Excluir"}
+                            </Button>
+                          </div>
+                        </>
+                      )}
+                    </article>
+                  )) : !calendarLoading && !calendarError ? (
+                    <div className="iris54-feature-card">
+                      <strong>Agenda sem compromissos futuros</strong>
+                      <p>{calendarMessage}</p>
                     </div>
-                  )) : <div className="iris54-feature-card"><strong>Agenda sem dados demonstrativos</strong><p>{calendarMessage}</p></div>}
+                  ) : null}
                 </div>
 
                 <div
@@ -2052,10 +2822,45 @@ export default function CommandCenter54() {
                   </button>
                 </div>
 
+                {analysisLoading && <p className="iris54-source-message" role="status">Atualizando fontes locais e remotas…</p>}
+                {analysisError && <p className="iris54-source-error" role="alert">{analysisError}</p>}
                 <div className="iris54-feature-grid">
-                  <div className="iris54-feature-card"><span className="iris54-kicker">DADOS REAIS</span><strong>Finanças carregadas</strong><p>{analysisRows.finances.length} lançamento(s) persistente(s) no D1. Gere um relatório para interpretação detalhada.</p></div>
-                  <div className="iris54-feature-card"><span className="iris54-kicker">DOCUMENTOS</span><strong>Arquivo catalogado</strong><p>{analysisRows.documents.length} documento(s) encontrado(s) no arquivo persistente.</p></div>
-                  <div className="iris54-feature-card"><span className="iris54-kicker">RADAR</span><strong>Pendências atuais</strong><p>{items.filter((item) => item.status !== "completed").length} item(ns) não concluído(s) no Radar local/D1.</p></div>
+                  <button
+                    type="button"
+                    className="iris54-feature-card iris54-feature-card-action"
+                    onClick={() => navigate("/financas")}
+                    aria-label="Abrir Finanças"
+                  >
+                    <span className="iris54-kicker">FINANÇAS · RESUMO LOCAL</span>
+                    <strong>Finanças carregadas</strong>
+                    <p>
+                      {analysisLoading ? "Atualizando…" : analysisRows.finances === null ? "Contagem indisponível" : `${analysisRows.finances.length} lançamento(s) encontrados.`}
+                      <br />Fonte: {analysisSources.finances}.
+                    </p>
+                  </button>
+                  <button
+                    type="button"
+                    className="iris54-feature-card iris54-feature-card-action"
+                    onClick={() => navigate("/documentos")}
+                    aria-label="Abrir Documentos"
+                  >
+                    <span className="iris54-kicker">DOCUMENTOS</span>
+                    <strong>Arquivo catalogado</strong>
+                    <p>
+                      {analysisLoading ? "Atualizando…" : analysisRows.documents === null ? "Contagem indisponível" : `${analysisRows.documents.length} documento(s) encontrados.`}
+                      <br />Fonte: {analysisSources.documents}.
+                    </p>
+                  </button>
+                  <button
+                    type="button"
+                    className="iris54-feature-card iris54-feature-card-action"
+                    onClick={() => setActiveView("radar")}
+                    aria-label="Abrir Radar de pendências"
+                  >
+                    <span className="iris54-kicker">RADAR</span>
+                    <strong>Pendências atuais</strong>
+                    <p>{items.filter((item) => item.status !== "completed").length} item(ns) não concluído(s) na lista atual.</p>
+                  </button>
                 </div>
 
                 <div
@@ -2066,20 +2871,35 @@ export default function CommandCenter54() {
                   }}
                 >
                   <Button
-                    onClick={() => {
-                      void sendMessage(
-                        "Faça uma análise completa das minhas pendências e oportunidades de economia.",
-                      );
-                    }}
+                    onClick={generateLocalAnalysisReport}
+                    disabled={analysisLoading}
                     style={{
                       background: "var(--iris-yellow)",
                       color: "#000",
                       fontWeight: 700,
                     }}
                   >
-                    Gerar Novo Relatório
+                    {analysisLoading ? "Carregando fontes…" : "Gerar Novo Relatório"}
                   </Button>
                 </div>
+                {analysisReport && (
+                  <section className="iris54-local-report" aria-labelledby="iris54-local-report-title">
+                    <div className="iris54-local-report-header">
+                      <div>
+                        <span className="iris54-kicker">RESUMO LOCAL VERIFICÁVEL</span>
+                        <strong id="iris54-local-report-title">Relatório calculado neste dispositivo</strong>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => downloadBlob("iris-resumo-local.txt", analysisReport, "text/plain;charset=utf-8")}
+                      >
+                        <Download size={15} /> Baixar texto
+                      </Button>
+                    </div>
+                    <pre>{analysisReport}</pre>
+                  </section>
+                )}
               </>
             )}
 

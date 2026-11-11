@@ -32,7 +32,7 @@ const manifestPath = resolve(output, "manifest.webmanifest");
 if (existsSync(manifestPath)) {
   const manifest = readFileSync(manifestPath, "utf8")
     .replace('"start_url": "/"', '"start_url": "."')
-    .replaceAll('"src": "/image.png"', '"src": "./image.png"');
+    .replaceAll('"src": "/icons/', '"src": "./icons/');
   writeFileSync(manifestPath, manifest);
 }
 const serviceWorkerPath = resolve(output, "sw.js");
@@ -40,8 +40,8 @@ if (existsSync(serviceWorkerPath)) {
   writeFileSync(
     serviceWorkerPath,
     readFileSync(serviceWorkerPath, "utf8").replace(
-      '["/", "/manifest.webmanifest", "/iris.svg"]',
-      '["./", "./manifest.webmanifest", "./iris.svg"]',
+      '["/", "/manifest.webmanifest", "/iris.svg", "/icons/iris-192.png", "/icons/iris-512.png"]',
+      '["./", "./manifest.webmanifest", "./iris.svg", "./icons/iris-192.png", "./icons/iris-512.png"]',
     ),
   );
 }

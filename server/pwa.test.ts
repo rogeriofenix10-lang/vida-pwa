@@ -22,12 +22,26 @@ describe("VIDA PWA metadata", () => {
     );
   });
 
+  it("uses PNG files whose actual dimensions match the manifest", () => {
+    const manifest = JSON.parse(readFileSync(resolve(process.cwd(), "client/public/manifest.webmanifest"), "utf8"));
+    for (const icon of manifest.icons) {
+      const bytes = readFileSync(resolve(process.cwd(), "client/public", icon.src.replace(/^\//, "")));
+      expect(bytes.subarray(1, 4).toString()).toBe("PNG");
+      expect(`${bytes.readUInt32BE(16)}x${bytes.readUInt32BE(20)}`).toBe(icon.sizes);
+    }
+  });
+
   it("keeps API and diagnostic requests outside the cache strategy", () => {
     const serviceWorker = readFileSync(resolve(process.cwd(), "client/public/sw.js"), "utf8");
 
+    expect(serviceWorker).toContain("/icons/iris-192.png");
+    expect(serviceWorker).toContain("/icons/iris-512.png");
     expect(serviceWorker).toContain('url.pathname.startsWith("/api/")');
     expect(serviceWorker).toContain('url.pathname.startsWith("/__manus__/")');
-    expect(serviceWorker).toContain("if (request.method !== \"GET\" || !isSameOrigin || isApiRequest) return;");
+    expect(serviceWorker).toContain('url.pathname.startsWith("/manus-storage/")');
+    expect(serviceWorker).toContain('request.headers.has("Authorization")');
+    expect(serviceWorker).toContain('response.headers.get("Cache-Control")');
+    expect(serviceWorker).toContain("if (request.method !== \"GET\" || !isSameOrigin || isApiRequest || isPrivateResource) return;");
     expect(serviceWorker).toContain('request.mode === "navigate"');
     expect(serviceWorker).not.toContain('cache.put(request, response)');
   });

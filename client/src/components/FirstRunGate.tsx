@@ -1,9 +1,11 @@
 import { useState } from "react";
 import { ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { IRIS_STATIC_MODE } from "@/lib/irisRuntime";
 
 const FIRST_RUN_KEY = "iris.firstRunCompleted";
+const REMOTE_OPT_IN_KEY = "iris.remoteOptIn";
+
+type IrisMode = "demo" | "connected";
 
 export default function FirstRunGate({
   children,
@@ -11,25 +13,25 @@ export default function FirstRunGate({
   children: React.ReactNode;
 }) {
   const [completed, setCompleted] = useState(
-    () => {
-      if (IRIS_STATIC_MODE) {
-        localStorage.setItem(FIRST_RUN_KEY, "1");
-        localStorage.setItem("iris.mode", "connected");
-        return true;
-      }
-      return localStorage.getItem(FIRST_RUN_KEY) === "1";
-    },
+    () => localStorage.getItem(FIRST_RUN_KEY) === "1",
   );
-  const [mode, setMode] = useState<"demo" | "connected">(
-    IRIS_STATIC_MODE ? "connected" : "demo",
-  );
+  const [mode, setMode] = useState<IrisMode>("demo");
+
   if (completed) return <>{children}</>;
+
   const finish = () => {
-    const selected = IRIS_STATIC_MODE ? "connected" : mode;
-    localStorage.setItem("iris.mode", selected);
+    if (mode === "connected") {
+      localStorage.setItem("iris.mode", "connected");
+      localStorage.setItem(REMOTE_OPT_IN_KEY, "1");
+    } else {
+      localStorage.setItem("iris.mode", "demo");
+      localStorage.removeItem(REMOTE_OPT_IN_KEY);
+    }
     localStorage.setItem(FIRST_RUN_KEY, "1");
+    window.dispatchEvent(new Event("iris-mode-changed"));
     setCompleted(true);
   };
+
   return (
     <main className="profile-page">
       <section className="profile-card first-run-card">
@@ -43,49 +45,48 @@ export default function FirstRunGate({
           </div>
         </div>
         <p>
-          Seus documentos, tarefas e backups ficam neste dispositivo. A Iris não
-          envia e-mails, mensagens, arquivos ou dados para fora sem sua
-          autorização individual.
+          Documentos, finanças e catálogo locais continuam disponíveis. A Iris não envia
+          mensagens, imagens ou outros dados para IA, Gmail, Drive, Calendar ou D1
+          automaticamente.
         </p>
         <div className="notification-settings">
           <strong>Escolha o modo de operação</strong>
           <label className="memory-row">
             <span>
-              <b>Demonstração local</b>
+              <b>Demonstração local (recomendado)</b>
               <br />
               <small>
-                Sem login, sem backend e com ações externas bloqueadas.
+                Sem chamadas remotas de IA ou D1. As ferramentas locais continuam funcionando.
               </small>
             </span>
             <input
               type="radio"
+              name="iris-first-run-mode"
               checked={mode === "demo"}
               onChange={() => setMode("demo")}
-              disabled={IRIS_STATIC_MODE}
             />
           </label>
           <label className="memory-row">
             <span>
-              <b>Conectado</b>
+              <b>Ativar serviços remotos</b>
               <br />
               <small>
-                Usa o Worker gratuito da Iris; cada integração ainda exigirá
-                aprovação antes de alterar dados.
+                Opt-in para Gmail, Drive, Calendar, IA e D1. Ainda será necessário
+                desbloquear com a credencial e pedir cada ação explicitamente.
               </small>
             </span>
             <input
               type="radio"
+              name="iris-first-run-mode"
               checked={mode === "connected"}
               onChange={() => setMode("connected")}
             />
           </label>
         </div>
-        {IRIS_STATIC_MODE && (
-          <small>
-            Esta publicação usa o Worker conectado da Iris sem expor chaves no
-            navegador. O modo local continua disponível como fallback técnico.
-          </small>
-        )}
+        <p className="remote-access-gate__description">
+          Selecionar serviços remotos não significa que uma conta Google esteja conectada nem
+          envia dados por si só. A credencial de desbloqueio não será armazenada pelo app.
+        </p>
         <Button onClick={finish}>Continuar com segurança</Button>
       </section>
     </main>

@@ -6,6 +6,7 @@ import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import LocalLockGate from "./components/LocalLockGate";
 import FirstRunGate from "./components/FirstRunGate";
+import RemoteAccessGate from "./components/RemoteAccessGate";
 
 const Home = lazy(() => import("@/pages/Home"));
 const Profile = lazy(() => import("./pages/Profile"));
@@ -70,6 +71,7 @@ function App() {
           <Toaster />
           <FirstRunGate>
             <LocalLockGate>
+              <RemoteAccessGate />
               <Router />
             </LocalLockGate>
           </FirstRunGate>

@@ -296,6 +296,11 @@ export default function SecurityCenter() {
             criado no navegador. Nenhum arquivo é enviado automaticamente para a
             nuvem.
           </p>
+          <p>
+            Restauração local aceita arquivos de até 50 MB; ZIPs são limitados a
+            1.000 entradas e 100 MB descompactados. O manifest e as coleções são
+            validados antes de qualquer substituição.
+          </p>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             <Button variant="outline" onClick={() => void backup(false)}>
               <Download size={15} /> Backup leve

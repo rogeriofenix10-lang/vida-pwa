@@ -7,8 +7,6 @@ on:
 
 permissions:
   contents: read
-  pages: write
-  id-token: write
 
 concurrency:
   group: pages
@@ -20,6 +18,8 @@ jobs:
     steps:
       - name: Baixar código
         uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - name: Configurar Node.js
         uses: actions/setup-node@v4
         with:
@@ -33,8 +33,6 @@ jobs:
         run: pnpm install --frozen-lockfile --prod=false
       - name: Gerar PWA estático
         run: pnpm run build:static
-      - name: Configurar Pages
-        uses: actions/configure-pages@v5
       - name: Upload do artefato
         uses: actions/upload-pages-artifact@v3
         with:
@@ -45,7 +43,12 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
     needs: build
+    permissions:
+      pages: write
+      id-token: write
     steps:
+      - name: Configurar Pages
+        uses: actions/configure-pages@v5
       - name: Publicar
         id: deployment
         uses: actions/deploy-pages@v4

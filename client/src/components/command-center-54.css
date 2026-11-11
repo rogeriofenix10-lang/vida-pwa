@@ -542,7 +542,7 @@
   position: relative;
   z-index: 30;
   display: grid;
-  grid-template-columns: repeat(4, minmax(120px, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 8px;
   width: min(720px, 100%);
   margin: 12px auto 0;
@@ -815,7 +815,7 @@
 /* STATS */
 .iris54-stats-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 14px;
   margin-bottom: 24px;
 }
@@ -1064,12 +1064,14 @@
    -------------------------------------------------------------------------- */
 .iris54-feature-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 16px;
   margin-top: 18px;
 }
 
 .iris54-feature-card {
+  min-width: 0;
+  overflow-wrap: anywhere;
   padding: 20px;
   border-radius: 16px;
   background: rgba(11, 22, 40, 0.7);
@@ -1097,10 +1099,168 @@
   line-height: 1.45;
 }
 
+.iris54-feature-grid > *,
+.iris54-feature-card a {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.iris54-feature-card-action {
+  width: 100%;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.iris54-feature-card-action:focus-visible {
+  outline: 2px solid var(--iris-cyan);
+  outline-offset: 3px;
+}
+
+.iris54-calendar-header-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex: 0 0 auto;
+  gap: 8px;
+}
+
+.iris54-source-message,
+.iris54-source-error {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  overflow-wrap: anywhere;
+  font-size: 13px;
+}
+
+.iris54-source-message {
+  color: #bae6fd;
+  background: rgba(14, 165, 233, 0.1);
+  border: 1px solid rgba(56, 189, 248, 0.2);
+}
+
+.iris54-source-error {
+  color: #fecdd3;
+  background: rgba(244, 63, 94, 0.1);
+  border: 1px solid rgba(244, 63, 94, 0.28);
+}
+
+.iris54-calendar-event-card {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.iris54-calendar-edit-form {
+  display: grid;
+  gap: 11px;
+  width: 100%;
+  min-width: 0;
+  margin-top: 10px;
+}
+
+.iris54-calendar-field {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  color: var(--iris-muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.iris54-calendar-field input,
+.iris54-calendar-field textarea {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  padding: 9px 10px;
+  border: 1px solid var(--iris-border);
+  border-radius: 9px;
+  background: #060b16;
+  color: var(--iris-text);
+  font: inherit;
+  font-size: 13px;
+}
+
+.iris54-calendar-field textarea {
+  resize: vertical;
+  line-height: 1.45;
+}
+
+.iris54-calendar-date-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  min-width: 0;
+}
+
+.iris54-calendar-all-day {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--iris-muted);
+  font-size: 12px;
+}
+
+.iris54-calendar-all-day input {
+  accent-color: var(--iris-cyan);
+}
+
+.iris54-calendar-timezone-note {
+  margin: 0 !important;
+  font-size: 11px !important;
+}
+
+.iris54-calendar-event-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.iris54-local-report {
+  min-width: 0;
+  margin-top: 20px;
+  padding: 16px;
+  border: 1px solid var(--iris-border);
+  border-radius: 16px;
+  background: rgba(11, 22, 40, 0.7);
+}
+
+.iris54-local-report-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.iris54-local-report-header > div {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.iris54-local-report-header strong {
+  color: #fff;
+  overflow-wrap: anywhere;
+}
+
+.iris54-local-report pre {
+  max-width: 100%;
+  margin: 14px 0 0;
+  color: #dbeafe;
+  font: 12px/1.6 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
 /* CARDS DE SEGURANÇA E PRIVACIDADE */
 .iris54-footer-cards {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 16px;
   margin-top: 24px;
   width: 100%;
@@ -1215,7 +1375,7 @@
   .iris54-stats-grid,
   .iris54-feature-grid,
   .iris54-footer-cards {
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .iris54-task-grid {
@@ -1283,13 +1443,13 @@
     padding: 0 14px;
   }
   .iris54-module-menu {
-    grid-template-columns: repeat(2, minmax(120px, 1fr));
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .iris54-stats-grid,
   .iris54-feature-grid,
   .iris54-footer-cards {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .iris54-view-container {
