@@ -130,7 +130,7 @@ export default function RemoteAccessGate() {
       } else if (result.storageCleared) {
         setNotice("Serviços protegidos e credencial apagada localmente, mas o Worker não confirmou a revogação. Conecte-se e remova este dispositivo no painel.");
       } else if (result.revoked) {
-        setNotice("O Worker confirmou a revogação, mas o navegador não confirmou a remoção da credencial local. Limpe os dados deste site antes de reabrir.");
+        setNotice("O Worker confirmou a revogação, mas o navegador não confirmou a remoção local da credencial. Ela não poderá restaurar acesso; tente Proteger novamente quando o armazenamento estiver disponível. Seus documentos locais não foram apagados.");
       } else {
         setNotice(`Sessão bloqueada, mas não foi possível confirmar a remoção local nem a revogação remota. ${result.error ?? "Tente novamente online."}`);
       }
