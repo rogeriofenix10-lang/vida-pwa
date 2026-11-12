@@ -30,3 +30,8 @@
 
 # Ajuste solicitado de layout (11/11/2026)
 - [x] Remover o painel fixo de serviços remotos do layout geral e manter o controle acessível em Configurações, sem alterar autenticação, sessão ou dados locais.
+
+# Acesso lembrado por dispositivo e recuperação de PIN (12/11/2026)
+- [x] Após validar a senha mestra uma vez neste navegador/dispositivo, manter acesso remoto ao reabrir ou recarregar sem salvar a senha mestra. Usar credencial rotativa de dispositivo com 90 dias de inatividade, renovação automática, expiração e revogação em Configurações. Expiração/revogação/limpeza do navegador exigem nova validação.
+- [x] Após validar o PIN local uma vez, permitir lembrar este navegador e não pedi-lo a cada reabertura; invalidar lembrança ao trocar/remover o PIN. Distinguir explicitamente PIN local da senha mestra remota.
+- [x] Recuperar PIN local esquecido pela validação da senha mestra remota, removendo somente a proteção PIN e preservando documentos, finanças, catálogo e demais dados locais. Mostrar/ocultar entrada e mensagens claras de rede/credencial incorreta.

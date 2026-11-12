@@ -6,6 +6,7 @@ const MAX_JSON_BYTES = 128 * 1024;
 const MAX_LOGIN_BYTES = 4096;
 const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
 const SESSION_TTL_SECONDS = 6 * 60 * 60;
+const DEVICE_SESSION_TTL_SECONDS = 90 * 24 * 60 * 60;
 const OAUTH_STATE_TTL_SECONDS = 10 * 60;
 const GMAIL_SCOPE = "https://www.googleapis.com/auth/gmail.readonly";
 const DRIVE_SCOPE = "https://www.googleapis.com/auth/drive";
@@ -21,6 +22,7 @@ Responda com clareza e recomendação prática. Para voz, seja natural e direto.
 
 function origins(v) { return v ? v.split(",").map(x => x.trim()).filter(Boolean) : []; }
 function cors(o, c) { const list = origins(c); const ok = o && (list.includes(o) || o === "https://gentle-bread-2f69.pages.dev"); return { ...(ok ? { "Access-Control-Allow-Origin": o } : {}), "Access-Control-Allow-Headers": "content-type, authorization, x-iris-confirm, x-iris-filename, x-iris-file-id", "Access-Control-Allow-Methods": "GET, POST, PATCH, DELETE, OPTIONS", Vary: "Origin" }; }
+function originIsAllowed(origin, allowed) { return !origin || origins(allowed).includes(origin) || origin === "https://gentle-bread-2f69.pages.dev"; }
 function json(body, status, o, c, extra = {}) { return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store", ...cors(o, c), ...extra } }); }
 function b64(bytes) { const value = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes); let binary = ""; for (let i = 0; i < value.length; i++) binary += String.fromCharCode(value[i]); return btoa(binary).replaceAll("+", "-").replaceAll("/", "_").replaceAll("=", ""); }
 function unb64(s) { const t = s.replaceAll("-", "+").replaceAll("_", "/") + "===".slice((s.length + 3) % 4); return Uint8Array.from(atob(t), c => c.charCodeAt(0)); }
@@ -107,18 +109,93 @@ function readJsonError(result, origin, allowed) { return json({ error: result.er
 function cookies(req) { return Object.fromEntries((req.headers.get("Cookie") || "").split(";").map(x => x.trim().split("=")).filter(x => x.length === 2)); }
 function cookie(name, value, maxAge) { return `${name}=${value}; Max-Age=${maxAge}; Path=/; Secure; HttpOnly; SameSite=Lax`; }
 function redirectLocation(env) { return env.GOOGLE_REDIRECT_URI || "https://iris-gemini-proxy.rogeriofenix10.workers.dev/oauth/callback"; }
-async function issueSessionToken(secret) {
+async function issueSessionToken(secret, deviceId) {
   const now = Math.floor(Date.now() / 1000);
-  return signJwt({ sub: "owner", typ: "session", iat: now, exp: now + SESSION_TTL_SECONDS }, secret);
+  return signJwt({ sub: "owner", typ: "session", iat: now, exp: now + SESSION_TTL_SECONDS, ...(deviceId ? { deviceId, jti: crypto.randomUUID() } : {}) }, secret);
 }
+async function deviceSecretVersion(secret) {
+  const signature = await crypto.subtle.sign("HMAC", await hmacKey(secret, ["sign"]), encoder.encode("iris-device-session-secret-version:v1"));
+  return b64(new Uint8Array(signature));
+}
+async function sha256Base64Url(value) { return b64(new Uint8Array(await crypto.subtle.digest("SHA-256", encoder.encode(value)))); }
+function newDeviceRefreshToken() { return b64(crypto.getRandomValues(new Uint8Array(32))); }
+function validDeviceId(value) { return typeof value === "string" && value.length > 0 && value.length <= 128 && /^[A-Za-z0-9_-]+$/.test(value); }
+function validRefreshToken(value) { return typeof value === "string" && value.length === 43 && /^[A-Za-z0-9_-]{43}$/.test(value); }
+function d1Changes(result) { return Number(result?.meta?.changes ?? result?.changes ?? 0); }
+function deviceSessionResponse(device, refreshToken, expiresAt) {
+  return { id: device.id, refreshToken, expiresAt: new Date(expiresAt * 1000).toISOString(), name: device.name };
+}
+function authUnavailable(origin, allowed) { return json({ error: "Autenticação indisponível." }, 503, origin, allowed); }
 async function login(req, env, origin, allowed) {
   if (!hasAccessSecret(env)) return json({ error: "Autenticação indisponível." }, 503, origin, allowed);
   const parsed = await readJson(req, MAX_LOGIN_BYTES);
   if (!parsed.ok) return readJsonError(parsed, origin, allowed);
   if (typeof parsed.value.password !== "string" || parsed.value.password.length === 0 || !await constantTimeSecretMatch(parsed.value.password, env.IRIS_ACCESS_SECRET)) return json({ error: "Credenciais inválidas." }, 401, origin, allowed);
+  const remembersDevice = parsed.value.rememberDevice === true;
+  let device = null;
+  let token;
   const now = Math.floor(Date.now() / 1000);
-  const token = await issueSessionToken(env.IRIS_ACCESS_SECRET);
-  return json({ ok: true, token, tokenType: "Bearer", expiresIn: SESSION_TTL_SECONDS, expiresAt: new Date((now + SESSION_TTL_SECONDS) * 1000).toISOString() }, 200, origin, allowed, { "Cache-Control": "no-store" });
+  if (remembersDevice) {
+    const rawName = parsed.value.deviceName;
+    if (typeof rawName !== "string" || rawName.length > 100 || !rawName.trim() || /[\u0000-\u001f\u007f]/.test(rawName)) return json({ error: "Nome do dispositivo inválido." }, 400, origin, allowed);
+    if (!env.IRIS_DB || typeof env.IRIS_DB.prepare !== "function") return json({ error: "Banco D1 indisponível para lembrar este dispositivo." }, 503, origin, allowed);
+    const name = rawName.trim();
+    const id = crypto.randomUUID();
+    const refreshToken = newDeviceRefreshToken();
+    const refreshHash = await sha256Base64Url(refreshToken);
+    const secretVersion = await deviceSecretVersion(env.IRIS_ACCESS_SECRET);
+    const deviceExpiresAt = now + DEVICE_SESSION_TTL_SECONDS;
+    token = await issueSessionToken(env.IRIS_ACCESS_SECRET, id);
+    try {
+      const result = await env.IRIS_DB.prepare("INSERT INTO iris_device_sessions(id,user_id,refresh_hash,secret_version,name,created_at,last_used_at,expires_at) VALUES(?,?,?,?,?,?,?,?)").bind(id, "owner", refreshHash, secretVersion, name, now, now, deviceExpiresAt).run();
+      if (result?.success === false) return authUnavailable(origin, allowed);
+    } catch {
+      return authUnavailable(origin, allowed);
+    }
+    device = deviceSessionResponse({ id, name }, refreshToken, deviceExpiresAt);
+  } else {
+    token = await issueSessionToken(env.IRIS_ACCESS_SECRET);
+  }
+  return json({ ok: true, token, tokenType: "Bearer", expiresIn: SESSION_TTL_SECONDS, expiresAt: new Date((now + SESSION_TTL_SECONDS) * 1000).toISOString(), ...(device ? { device } : {}) }, 200, origin, allowed, { "Cache-Control": "no-store" });
+}
+async function refreshDevice(req, env, origin, allowed) {
+  const parsed = await readJson(req);
+  if (!parsed.ok) return readJsonError(parsed, origin, allowed);
+  const { deviceId, refreshToken } = parsed.value;
+  if (!validDeviceId(deviceId) || !validRefreshToken(refreshToken)) return json({ error: "Sessão de dispositivo inválida." }, 400, origin, allowed);
+  if (!hasAccessSecret(env) || !env.IRIS_DB || typeof env.IRIS_DB.prepare !== "function") return authUnavailable(origin, allowed);
+  const now = Math.floor(Date.now() / 1000), expiresAt = now + DEVICE_SESSION_TTL_SECONDS;
+  try {
+    const refreshHash = await sha256Base64Url(refreshToken);
+    const secretVersion = await deviceSecretVersion(env.IRIS_ACCESS_SECRET);
+    const device = await env.IRIS_DB.prepare("SELECT name FROM iris_device_sessions WHERE id=? AND user_id=? AND refresh_hash=? AND secret_version=? AND revoked_at IS NULL AND expires_at > ?").bind(deviceId, "owner", refreshHash, secretVersion, now).first();
+    if (!device) return json({ error: "Sessão de dispositivo inválida ou expirada." }, 401, origin, allowed);
+    const nextRefreshToken = newDeviceRefreshToken();
+    const nextRefreshHash = await sha256Base64Url(nextRefreshToken);
+    const accessToken = await issueSessionToken(env.IRIS_ACCESS_SECRET, deviceId);
+    const result = await env.IRIS_DB.prepare("UPDATE iris_device_sessions SET refresh_hash=?,last_used_at=?,expires_at=? WHERE id=? AND user_id=? AND refresh_hash=? AND secret_version=? AND revoked_at IS NULL AND expires_at > ?").bind(nextRefreshHash, now, expiresAt, deviceId, "owner", refreshHash, secretVersion, now).run();
+    if (result?.success === false) return authUnavailable(origin, allowed);
+    if (d1Changes(result) !== 1) return json({ error: "Sessão de dispositivo inválida ou expirada." }, 401, origin, allowed);
+    return json({ ok: true, token: accessToken, tokenType: "Bearer", expiresIn: SESSION_TTL_SECONDS, expiresAt: new Date((now + SESSION_TTL_SECONDS) * 1000).toISOString(), device: deviceSessionResponse({ id: deviceId, name: String(device.name || "") }, nextRefreshToken, expiresAt) }, 200, origin, allowed);
+  } catch {
+    return authUnavailable(origin, allowed);
+  }
+}
+async function revokeDeviceWithRefresh(req, env, origin, allowed) {
+  const parsed = await readJson(req);
+  if (!parsed.ok) return readJsonError(parsed, origin, allowed);
+  const { deviceId, refreshToken } = parsed.value;
+  if (!validDeviceId(deviceId) || !validRefreshToken(refreshToken)) return json({ error: "Sessão de dispositivo inválida." }, 400, origin, allowed);
+  if (!env.IRIS_DB || typeof env.IRIS_DB.prepare !== "function") return authUnavailable(origin, allowed);
+  try {
+    const refreshHash = await sha256Base64Url(refreshToken);
+    const result = await env.IRIS_DB.prepare("UPDATE iris_device_sessions SET revoked_at=? WHERE id=? AND user_id=? AND refresh_hash=? AND revoked_at IS NULL").bind(Math.floor(Date.now() / 1000), deviceId, "owner", refreshHash).run();
+    if (result?.success === false) return authUnavailable(origin, allowed);
+    if (d1Changes(result) !== 1) return json({ error: "Sessão de dispositivo inválida." }, 401, origin, allowed);
+    return json({ ok: true }, 200, origin, allowed);
+  } catch {
+    return authUnavailable(origin, allowed);
+  }
 }
 async function authenticatedSubject(req, env, origin, allowed) {
   if (!hasAccessSecret(env)) return { response: json({ error: "Autenticação indisponível." }, 503, origin, allowed) };
@@ -129,6 +206,18 @@ async function authenticatedSubject(req, env, origin, allowed) {
   const claims = await verifyJwt(match[1], env.IRIS_ACCESS_SECRET);
   const now = Math.floor(Date.now() / 1000);
   if (!claims || claims.typ !== "session" || claims.sub !== "owner" || !Number.isInteger(claims.iat) || !Number.isInteger(claims.exp) || claims.iat > now + 30 || claims.exp <= now || claims.exp <= claims.iat || claims.exp - claims.iat < 4 * 60 * 60 || claims.exp - claims.iat > 8 * 60 * 60) return { response: json({ error: "Token ausente, inválido ou expirado." }, 401, origin, allowed) };
+  if (claims.deviceId !== undefined) {
+    if (!validDeviceId(claims.deviceId)) return { response: json({ error: "Token ausente, inválido ou expirado." }, 401, origin, allowed) };
+    if (!env.IRIS_DB || typeof env.IRIS_DB.prepare !== "function") return { response: authUnavailable(origin, allowed) };
+    try {
+      const secretVersion = await deviceSecretVersion(env.IRIS_ACCESS_SECRET);
+      const result = await env.IRIS_DB.prepare("UPDATE iris_device_sessions SET last_used_at=?,expires_at=? WHERE id=? AND user_id=? AND secret_version=? AND revoked_at IS NULL AND expires_at > ?").bind(now, now + DEVICE_SESSION_TTL_SECONDS, claims.deviceId, claims.sub, secretVersion, now).run();
+      if (result?.success === false) return { response: authUnavailable(origin, allowed) };
+      if (d1Changes(result) !== 1) return { response: json({ error: "Token ausente, inválido ou expirado." }, 401, origin, allowed) };
+    } catch {
+      return { response: authUnavailable(origin, allowed) };
+    }
+  }
   return { subject: claims.sub };
 }
 async function createOAuthState(env, product) {
@@ -427,15 +516,53 @@ async function storageUpload(req, env, subject) {
   }
   return json({ ok: true, id, key, name, size }, 201, req.headers.get("Origin"), env.ALLOWED_ORIGIN);
 }
+function epochSecondsIso(value) {
+  const seconds = Number(value);
+  return Number.isSafeInteger(seconds) ? new Date(seconds * 1000).toISOString() : null;
+}
+async function listDeviceSessions(env, subject, origin, allowed) {
+  if (!env.IRIS_DB || typeof env.IRIS_DB.prepare !== "function" || !hasAccessSecret(env)) return authUnavailable(origin, allowed);
+  const now = Math.floor(Date.now() / 1000);
+  try {
+    const secretVersion = await deviceSecretVersion(env.IRIS_ACCESS_SECRET);
+    const result = await env.IRIS_DB.prepare("SELECT id,name,created_at,last_used_at,expires_at FROM iris_device_sessions WHERE user_id=? AND secret_version=? AND revoked_at IS NULL AND expires_at > ? ORDER BY last_used_at DESC").bind(userId(subject), secretVersion, now).all();
+    const devices = (result.results || []).map(row => ({ id: row.id, name: row.name, createdAt: epochSecondsIso(row.created_at), lastUsedAt: epochSecondsIso(row.last_used_at), expiresAt: epochSecondsIso(row.expires_at) }));
+    return json({ devices }, 200, origin, allowed);
+  } catch {
+    return authUnavailable(origin, allowed);
+  }
+}
+async function revokeOwnedDevice(env, deviceId, subject, origin, allowed) {
+  if (!validDeviceId(deviceId)) return json({ error: "Dispositivo não encontrado." }, 404, origin, allowed);
+  if (!env.IRIS_DB || typeof env.IRIS_DB.prepare !== "function") return authUnavailable(origin, allowed);
+  try {
+    const result = await env.IRIS_DB.prepare("UPDATE iris_device_sessions SET revoked_at=? WHERE id=? AND user_id=? AND revoked_at IS NULL").bind(Math.floor(Date.now() / 1000), deviceId, userId(subject)).run();
+    if (result?.success === false) return authUnavailable(origin, allowed);
+    if (d1Changes(result) !== 1) return json({ error: "Dispositivo não encontrado." }, 404, origin, allowed);
+    return json({ ok: true }, 200, origin, allowed);
+  } catch {
+    return authUnavailable(origin, allowed);
+  }
+}
 async function handle(req, env) {
   const origin = req.headers.get("Origin"), allowed = env.ALLOWED_ORIGIN || "";
   if (req.headers.has("X-Iris-User")) return json({ error: "X-Iris-User não é aceito." }, 401, origin, allowed);
   if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: cors(origin, allowed) });
   const url = new URL(req.url), path = url.pathname;
+  const strictOriginRoute = path === "/auth/login" || path === "/auth/refresh" || path === "/auth/device/revoke" || path === "/auth/devices" || path.startsWith("/auth/devices/");
+  if (strictOriginRoute && !originIsAllowed(origin, allowed)) return json({ error: "Origem não autorizada." }, 403, origin, allowed);
   if (path === "/" && req.method === "GET") return json({ ok: true, service: "iris-gemini-proxy", model: env.GEMINI_MODEL || DEFAULT_MODEL }, 200, origin, allowed);
   if (path === "/auth/login") {
     if (req.method !== "POST") return json({ error: "Use POST." }, 405, origin, allowed);
     return login(req, env, origin, allowed);
+  }
+  if (path === "/auth/refresh") {
+    if (req.method !== "POST") return json({ error: "Use POST." }, 405, origin, allowed);
+    return refreshDevice(req, env, origin, allowed);
+  }
+  if (path === "/auth/device/revoke") {
+    if (req.method !== "POST") return json({ error: "Use POST." }, 405, origin, allowed);
+    return revokeDeviceWithRefresh(req, env, origin, allowed);
   }
   if (path === "/oauth/callback") {
     if (req.method !== "GET") return json({ error: "Método não permitido." }, 405, origin, allowed);
@@ -445,6 +572,17 @@ async function handle(req, env) {
   if (auth.response) return auth.response;
   const subject = auth.subject;
 
+  if (path === "/auth/devices") {
+    if (req.method !== "GET") return json({ error: "Use GET." }, 405, origin, allowed);
+    return listDeviceSessions(env, subject, origin, allowed);
+  }
+  const deviceRoute = path.match(/^\/auth\/devices\/([^/]+)$/);
+  if (deviceRoute) {
+    if (req.method !== "DELETE") return json({ error: "Use DELETE." }, 405, origin, allowed);
+    let deviceId;
+    try { deviceId = decodeURIComponent(deviceRoute[1]); } catch { return json({ error: "Dispositivo não encontrado." }, 404, origin, allowed); }
+    return revokeOwnedDevice(env, deviceId, subject, origin, allowed);
+  }
   if (path === "/oauth/start") {
     if (req.method !== "POST") return json({ error: "Use POST." }, 405, origin, allowed);
     return oauthStart(req, env, origin, allowed);

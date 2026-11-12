@@ -1,4 +1,4 @@
-import { lazy, Suspense } from "react";
+import { lazy, Suspense, useEffect } from "react";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Route, Switch } from "wouter";
@@ -6,6 +6,11 @@ import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import LocalLockGate from "./components/LocalLockGate";
 import FirstRunGate from "./components/FirstRunGate";
+import {
+  isIrisRemoteModeEnabled,
+  lockIrisAccess,
+  restoreIrisAccess,
+} from "@/lib/irisWorker";
 
 const Home = lazy(() => import("@/pages/Home"));
 const Profile = lazy(() => import("./pages/Profile"));
@@ -63,6 +68,41 @@ function Router() {
 }
 
 function App() {
+  useEffect(() => {
+    const reconcileRemoteMode = () => {
+      if (isIrisRemoteModeEnabled()) {
+        void restoreIrisAccess();
+      } else {
+        void lockIrisAccess();
+      }
+    };
+    const onStorage = (event: StorageEvent) => {
+      if (event.key === null || event.key === "iris.mode" || event.key === "iris.remoteOptIn") {
+        reconcileRemoteMode();
+      }
+    };
+    const onResume = () => {
+      if (isIrisRemoteModeEnabled()) void restoreIrisAccess();
+    };
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") onResume();
+    };
+
+    reconcileRemoteMode();
+    window.addEventListener("iris-mode-changed", reconcileRemoteMode);
+    window.addEventListener("storage", onStorage);
+    window.addEventListener("online", onResume);
+    window.addEventListener("focus", onResume);
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      window.removeEventListener("iris-mode-changed", reconcileRemoteMode);
+      window.removeEventListener("storage", onStorage);
+      window.removeEventListener("online", onResume);
+      window.removeEventListener("focus", onResume);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, []);
+
   return (
     <ErrorBoundary>
       <ThemeProvider defaultTheme="dark" switchable>
