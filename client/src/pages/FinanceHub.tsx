@@ -12,23 +12,13 @@ import {
 } from "lucide-react";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
-import { assertLocalFileSize, downloadJson, readLocal, writeLocal } from "@/lib/irisLocalStore";
-import { readDocumentText } from "@/lib/localOcr";
-import { parseExpenseLines, type ExpenseCategory } from "@shared/expenseParser";
+import { assertLocalFileSize, downloadJson, readLocal, writeLocal, writeLocalBatch } from "@/lib/irisLocalStore";
+import { buildStatementEntries, financialFileHash, groupExpenses, readFinancialDocument, type FinancialEntry } from "@/lib/financeDocuments";
+import { EXPENSE_CATEGORIES, inferExpenseCategory, type ExpenseCategory } from "@shared/expenseParser";
+import { redactFinancialIdentifiers } from "@shared/cardStatement";
 import "./finance-hub.css";
 
-type Entry = {
-  id: string;
-  type: "income" | "expense";
-  description: string;
-  amount: number;
-  status: "open" | "paid" | "overdue";
-  dueAt: string;
-  createdAt: string;
-  category?: ExpenseCategory;
-  source?: string;
-  sourceDocumentId?: string;
-};
+type Entry = FinancialEntry;
 
 type StoredFinanceDocument = {
   id: string;
@@ -54,6 +44,10 @@ type StoredFinanceDocument = {
   blob?: Blob;
   processing?: boolean;
   processingError?: string;
+  institution?: string;
+  brand?: string;
+  statementTotal?: number;
+  warnings?: string[];
 };
 
 const empty = {
@@ -63,20 +57,7 @@ const empty = {
   status: "open" as Entry["status"],
   dueAt: "",
 };
-const expenseCategories: ExpenseCategory[] = [
-  "Hotel",
-  "Posto de combustível",
-  "Supermercado",
-  "Restaurante",
-  "Farmácia",
-  "Transporte",
-  "Serviços",
-  "Outros",
-];
-const healthTerms =
-  /exame|laudo|hemoglobina|glicose|colesterol|triglicer|press[aã]o|consulta|laborat[oó]rio/i;
-const financeTerms =
-  /fatura|cart[aã]o|vencimento|parcela|estabelecimento|compra|lan[cç]amento|banco|visa|mastercard|elo|amex/i;
+const expenseCategories = EXPENSE_CATEGORIES;
 const money = (value: number) =>
   value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 
@@ -86,25 +67,25 @@ async function upsertStoredDocument(document: StoredFinanceDocument) {
   await writeLocal("irisDocuments", next);
 }
 
-function classifyDocument(file: File, text: string): StoredFinanceDocument["kind"] {
-  const combined = `${file.name} ${text}`;
-  if (healthTerms.test(combined)) return "saude";
-  if (financeTerms.test(combined) || parseExpenseLines(text).length > 0) {
-    return "financeiro";
-  }
-  return "geral";
-}
-
 export default function FinanceHub() {
   const [items, setItems] = useState<Entry[]>([]);
   const [draft, setDraft] = useState(empty);
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
+  const [documents, setDocuments] = useState<StoredFinanceDocument[]>([]);
+  const [categoryFilter, setCategoryFilter] = useState<string>("all");
 
   useEffect(() => {
-    void readLocal<Entry[]>("irisFinances", [])
-      .then(setItems)
-      .catch(() => setMessage("Não foi possível abrir os lançamentos locais."));
+    let active = true;
+    const load = () => void Promise.all([
+      readLocal<Entry[]>("irisFinances", []),
+      readLocal<StoredFinanceDocument[]>("irisDocuments", []),
+    ]).then(([entries, docs]) => {
+      if (active) { setItems(entries); setDocuments(docs); }
+    }).catch(() => { if (active) setMessage("Não foi possível abrir os lançamentos locais."); });
+    load();
+    window.addEventListener("iris-local-changed", load);
+    return () => { active = false; window.removeEventListener("iris-local-changed", load); };
   }, []);
 
   const addEntries = async (entries: Entry[], notice: string) => {
@@ -130,114 +111,103 @@ export default function FinanceHub() {
     const entry: Entry = {
       id: crypto.randomUUID(),
       type: draft.type,
-      description: draft.description.trim(),
+      description: redactFinancialIdentifiers(draft.description.trim()),
       amount,
       status: draft.status,
       dueAt: draft.dueAt,
       createdAt: new Date().toISOString(),
-      category: "Outros",
+      category: inferExpenseCategory(draft.description),
     };
     await addEntries([entry], "Lançamento salvo neste dispositivo.");
     setDraft(empty);
   };
 
-  const importFile = async (file: File) => {
+  const importFile = async (file: File, preferredId?: string, forceOcr = false) => {
+    const safeName = redactFinancialIdentifiers(file.name);
     try {
-      assertLocalFileSize(file, file.name);
+      assertLocalFileSize(file, safeName);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Arquivo acima do limite local de 50 MB.");
       return;
     }
     setBusy(true);
-    setMessage(`Salvando o original de ${file.name} neste dispositivo antes da leitura…`);
-    const hash = `${file.name.toLowerCase()}|${file.size}|${file.lastModified}`;
+    setMessage(`Preparando a leitura local de ${safeName}…`);
     let document: StoredFinanceDocument | undefined;
 
     try {
+      const hash = await financialFileHash(file);
       const storedDocuments = await readLocal<StoredFinanceDocument[]>("irisDocuments", []);
-      if (storedDocuments.some((item) => item.hash === hash)) {
-        setMessage("Este arquivo já está arquivado localmente; nada foi duplicado.");
-        return;
-      }
+      const legacyHash = redactFinancialIdentifiers(`${file.name.toLowerCase()}|${file.size}|${file.lastModified}`);
+      const existing = storedDocuments.find((item) => preferredId ? item.id === preferredId : item.hash === hash || item.hash === legacyHash);
 
       document = {
-        id: crypto.randomUUID(),
-        name: file.name,
+        ...existing,
+        id: existing?.id ?? crypto.randomUUID(),
+        name: safeName,
         mime: file.type || "application/octet-stream",
         size: file.size,
         folder: "Financeiro",
         kind: "financeiro",
-        createdAt: new Date().toISOString(),
-        extractedText: "",
+        createdAt: existing?.createdAt ?? new Date().toISOString(),
+        extractedText: existing?.extractedText ?? "",
         analysis: file.type.startsWith("image/") || file.type === "application/pdf"
           ? "arquivado · OCR necessário"
           : "arquivado · formato não textual",
-        money: [],
+        money: existing?.money ?? [],
         markers: {},
         hash,
         reviewStatus: "pending",
         confidence: 0,
-        blob: file,
+        blob: existing?.blob ?? new Blob([file], { type: file.type || "application/octet-stream" }),
         processing: true,
       };
       await upsertStoredDocument(document);
 
-      setMessage(`Original de ${file.name} salvo localmente. Lendo o documento…`);
-      const result = await readDocumentText(file, ({ progress, status }) => {
+      const { reading: result, statement, reliable } = await readFinancialDocument(file, ({ progress, status }) => {
         setMessage(
-          `Original de ${file.name} salvo localmente · ${status} (${Math.round(progress * 100)}%).`,
+          `${safeName} · ${status} (${Math.round(progress * 100)}%). Sem envio do PDF.`,
         );
-      });
-      const kind = classifyDocument(file, result.text);
-      const reliable =
-        Boolean(result.text) &&
-        (result.method !== "ocr" || result.confidence >= 45);
-      const parsed = reliable && kind === "financeiro"
-        ? parseExpenseLines(result.text)
-        : [];
+      }, forceOcr);
+      const parsed = reliable ? statement.expenses : [];
+      const warnings = [...statement.warnings, ...(result.warning ? [result.warning] : [])];
 
       document = {
         ...document,
-        kind,
-        extractedText: reliable ? result.text : "",
+        kind: "financeiro",
+        extractedText: reliable ? redactFinancialIdentifiers(result.text) : document.extractedText,
         analysis: reliable
           ? "texto extraído"
           : file.type.startsWith("image/") || file.type === "application/pdf"
             ? "arquivado · OCR necessário"
             : "arquivado · formato não textual",
-        money: parsed,
-        total: parsed.reduce((sum, line) => sum + line.amount, 0) || undefined,
+        money: parsed.length ? parsed : document.money,
+        total: parsed.length ? parsed.reduce((sum, line) => sum + line.amount, 0) : document.total,
+        institution: statement.institution ?? document.institution,
+        brand: statement.brand ?? document.brand,
+        statementTotal: statement.statementTotal ?? document.statementTotal,
+        warnings,
         confidence: result.confidence / 100,
         processing: false,
         processingError: undefined,
       };
-      await upsertStoredDocument(document);
+      const latestDocuments = await readLocal<StoredFinanceDocument[]>("irisDocuments", []);
+      const latestEntries = await readLocal<Entry[]>("irisFinances", []);
+      const nextEntries = parsed.length ? buildStatementEntries(document, latestEntries) : latestEntries;
+      const nextDocuments = [document, ...latestDocuments.filter((item) => item.id !== document!.id)];
+      await writeLocalBatch({ irisDocuments: nextDocuments, irisFinances: nextEntries });
+      setItems(nextEntries);
+      setDocuments(nextDocuments);
 
       if (!parsed.length) {
         setMessage(
           reliable
-            ? "Original arquivado. A leitura terminou, mas não encontrei despesas individualizadas para revisar."
-            : `Original arquivado para revisão; leitura insuficiente (confiança ${Math.round(result.confidence)}%).${result.warning ? ` ${result.warning}` : ""}`,
+            ? `A leitura não encontrou transações confiáveis. Nenhum lançamento anterior foi apagado. Use “Ler imagem (OCR)” abaixo para tentar outra leitura.${warnings.length ? ` ${warnings.join(" ")}` : ""}`
+            : `Leitura insuficiente (confiança ${Math.round(result.confidence)}%). Nenhum lançamento anterior foi apagado.${warnings.length ? ` ${warnings.join(" ")}` : ""}`,
         );
         return;
       }
 
-      const entries: Entry[] = parsed.map((line, index) => ({
-        id: `${document!.id}:expense:${index}`,
-        type: "expense",
-        description: line.source,
-        amount: line.amount,
-        status: "open",
-        dueAt: "",
-        createdAt: document!.createdAt,
-        category: line.category,
-        source: document!.name,
-        sourceDocumentId: document!.id,
-      }));
-      await addEntries(
-        entries,
-        `${entries.length} despesa(s) adicionada(s) para revisão. Original salvo localmente; OCR ${Math.round(result.confidence)}%.`,
-      );
+      setMessage(`${parsed.length} lançamento(s) individualizado(s) e agrupado(s) para revisão. ${document.institution ?? "Instituição não identificada"} · ${document.brand ?? "Bandeira não identificada"}. Números de conta e cartão omitidos da análise.${warnings.length ? ` ${warnings.join(" ")}` : ""}`);
     } catch (error) {
       if (document) {
         const failedDocument = {
@@ -250,12 +220,17 @@ export default function FinanceHub() {
       }
       setMessage(
         error instanceof Error
-          ? `Falha na leitura de ${file.name}; o original continua arquivado localmente. ${error.message}`
-          : `Falha na leitura de ${file.name}; o original continua arquivado localmente.`,
+          ? redactFinancialIdentifiers(`Falha na leitura de ${safeName}. ${error.message}`)
+          : `Falha na leitura de ${safeName}.`,
       );
     } finally {
       setBusy(false);
     }
+  };
+
+  const reprocess = (doc: StoredFinanceDocument, forceOcr = false) => {
+    if (!doc.blob) { setMessage("O PDF original não está neste navegador. Importe-o novamente para leitura."); return; }
+    void importFile(new File([doc.blob], doc.name, { type: doc.mime }), doc.id, forceOcr);
   };
 
   const updateCategory = async (id: string, category: ExpenseCategory) => {
@@ -295,6 +270,9 @@ export default function FinanceHub() {
         item.dueAt < new Date().toISOString().slice(0, 10) &&
         item.status === "open"),
   );
+  const groups = useMemo(() => groupExpenses(items), [items]);
+  const financialDocuments = documents.filter((doc) => doc.kind === "financeiro" || doc.folder === "Financeiro");
+  const filteredItems = categoryFilter === "all" ? items : items.filter((item) => (item.category ?? "Outros") === categoryFilter);
 
   return (
     <main className="finance-page">
@@ -318,10 +296,9 @@ export default function FinanceHub() {
           <h2>Importar documento de gastos</h2>
           <p>
             PDF, JPG, PNG, CSV, TXT e JSON até 50 MB por arquivo. Salve planilhas Excel como CSV.
-            PDFs para OCR
-            têm até 100 páginas e 16 milhões de pixels por página. O original é salvo no
-            dispositivo antes da leitura local; nenhuma despesa é criada sem
-            texto e valores verificáveis.
+            Leitura de todas as páginas, até 100 páginas e 16 milhões de pixels por página no OCR.
+            Somente instituição, bandeira, datas, estabelecimentos e valores entram na análise;
+            números de conta/cartão são omitidos, inclusive os últimos dígitos.
           </p>
           <div className="finance-import-actions">
             <label className="finance-import-button">
@@ -340,6 +317,7 @@ export default function FinanceHub() {
             </label>
           </div>
           {message && <div className="finance-message" role="status">{message}</div>}
+          <small className="finance-privacy-note">O PDF original permanece local e inalterado: ele pode conter dados pessoais. Não é enviado automaticamente, e os relatórios derivados não incluem números de conta/cartão.</small>
         </section>
 
         <div className="finance-summary-grid">
@@ -362,6 +340,31 @@ export default function FinanceHub() {
             <small>revisar pendência(s)</small>
           </div>
         </div>
+
+        <section className="finance-card" aria-label="Gastos agrupados por segmento">
+          <h2><Receipt size={20} /> Gastos por segmento</h2>
+          <p className="finance-privacy-note">Compras e encargos individualizados. Pagamentos, créditos, saldos transferidos e totais de fatura não são somados como novas despesas. Estabelecimentos sem evidência suficiente ficam em Outros para você revisar.</p>
+          {groups.length === 0 ? <div className="finance-empty">Importe a fatura para ver os grupos.</div> : groups.map((group) => (
+            <details className="finance-group" key={group.category}>
+              <summary><span>{group.category} · {group.count} lançamento(s)</span><strong>{money(group.total)}</strong></summary>
+              {group.entries.map((entry) => <div className="finance-group-entry" key={entry.id}><span>{entry.purchaseDate ? `${entry.purchaseDate} · ` : ""}{entry.description}</span><b>{money(entry.amount)}</b></div>)}
+            </details>
+          ))}
+        </section>
+
+        {financialDocuments.length > 0 && <section className="finance-card" aria-label="Faturas importadas">
+          <h2><FileText size={20} /> Faturas e documentos importados</h2>
+          {financialDocuments.map((doc) => <div className="finance-statement" key={doc.id}>
+            <strong>{doc.name}</strong>
+            <small>{doc.institution ?? "Instituição não identificada"} · {doc.brand ?? "Bandeira não identificada"} · {doc.money?.length ?? 0} lançamento(s)</small>
+            {typeof doc.statementTotal === "number" && <small>Total informado na fatura: {money(doc.statementTotal)}. Pode incluir saldo anterior e ajustes, além dos gastos deste período.</small>}
+            {doc.warnings?.map((warning, index) => <small key={index} className="finance-warning">{warning}</small>)}
+            <div className="finance-import-actions">
+              <Button variant="outline" onClick={() => reprocess(doc)} disabled={busy || !doc.blob}>Ler novamente</Button>
+              {/pdf|image/.test(doc.mime) && <Button variant="outline" onClick={() => reprocess(doc, true)} disabled={busy || !doc.blob}>Ler imagem (OCR)</Button>}
+            </div>
+          </div>)}
+        </section>}
 
         <section className="finance-card">
           <h2><Plus size={20} /> Novo lançamento</h2>
@@ -408,6 +411,10 @@ export default function FinanceHub() {
         <section className="finance-card">
           <div className="finance-list-head">
             <h2><FileText size={20} /> Lançamentos discriminados ({items.length})</h2>
+            <select value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value)} aria-label="Filtrar lançamentos por segmento">
+              <option value="all">Todos os segmentos</option>
+              {expenseCategories.map((category) => <option value={category} key={category}>{category}</option>)}
+            </select>
             <Button
               variant="outline"
               onClick={() =>
@@ -427,14 +434,17 @@ export default function FinanceHub() {
               adicione um lançamento manual.
             </div>
           ) : (
-            items.map((item) => (
+            filteredItems.map((item) => (
               <div className="finance-row" key={item.id}>
                 <div>
                   <b>{item.type === "income" ? "A receber" : "A pagar"} · {item.description}</b>
                   <small>
                     {item.category || "Outros"} · {money(item.amount)} · {item.status}
+                    {item.purchaseDate ? ` · compra ${item.purchaseDate}` : ""}
                     {item.dueAt ? ` · vencimento ${item.dueAt}` : ""}
                     {item.source ? ` · ${item.source}` : ""}
+                    {item.institution ? ` · ${item.institution}` : ""}
+                    {item.brand ? ` · ${item.brand}` : ""}
                   </small>
                 </div>
                 <select

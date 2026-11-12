@@ -14,10 +14,17 @@ import {
 } from "lucide-react";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
-import { csvCell, downloadBlob, readLocal, writeLocal, assertLocalFileSize } from "@/lib/irisLocalStore";
+import { csvCell, downloadBlob, readLocal, writeLocal, writeLocalBatch, assertLocalFileSize } from "@/lib/irisLocalStore";
 import { downloadIrisFile } from "@/lib/irisWorker";
-import { readDocumentText } from "@/lib/localOcr";
-import { parseExpenseLines, type ExpenseCategory } from "@shared/expenseParser";
+import { readDocumentText, type DocumentReadResult } from "@/lib/localOcr";
+import {
+  buildStatementEntries,
+  financialFileHash,
+  readFinancialDocument,
+  type FinancialEntry,
+} from "@/lib/financeDocuments";
+import { parseCardStatement, redactFinancialIdentifiers } from "@shared/cardStatement";
+import { parseExpenseLines, type ExpenseCategory, type ParsedExpense } from "@shared/expenseParser";
 import "./document-vault.css";
 
 type Kind = "saude" | "financeiro" | "geral";
@@ -27,18 +34,7 @@ type Money = {
   source: string;
   date?: string;
 };
-type FinanceEntry = {
-  id: string;
-  type: "expense";
-  description: string;
-  category: ExpenseCategory;
-  amount: number;
-  status: "open" | "paid" | "overdue";
-  createdAt: string;
-  dueAt: string;
-  source: string;
-  sourceDocumentId: string;
-};
+type FinanceEntry = FinancialEntry;
 type DocumentRecord = {
   id: string;
   name: string;
@@ -55,6 +51,8 @@ type DocumentRecord = {
   institution?: string;
   brand?: string;
   total?: number;
+  statementTotal?: number;
+  warnings?: string[];
   money: Money[];
   markers: Record<string, number>;
   hash?: string;
@@ -70,6 +68,57 @@ const healthTerms =
   /exame|laudo|hemoglobina|glicose|colesterol|triglicer|press[aã]o|consulta|laborat[oó]rio/i;
 const financeTerms =
   /fatura|cart[aã]o|vencimento|parcela|estabelecimento|compra|lan[cç]amento|banco|visa|mastercard|elo|amex/i;
+const explicitFinanceTerms =
+  /fatura|cart[aã]o|transa[cç][oõ]es?|extrato|lan[cç]amentos?/i;
+const statementSectionTerms = /^\s*(?:transa[cç][oõ]es\b|compras\s*(?:\/\s*pagamentos?)?\b)/im;
+
+function safeStoredText(value: string, maxLength = 200000) {
+  return redactFinancialIdentifiers(
+    value.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, " "),
+  ).slice(0, maxLength);
+}
+
+function safeFileName(value: string) {
+  const leaf = value.replaceAll("\\", "/").split("/").pop() ?? value;
+  return safeStoredText(leaf.replace(/[\u0000-\u001F\u007F]/g, "_"), 180).trim() || "documento";
+}
+
+function safeExpenses(expenses: ParsedExpense[]): Money[] {
+  return expenses.map((expense) => ({
+    ...expense,
+    source: safeStoredText(expense.source, 500),
+  }));
+}
+
+function safeWarnings(warnings: string[]) {
+  return warnings.map((warning) => safeStoredText(warning, 500)).filter(Boolean);
+}
+
+function sanitizeDocumentForStorage(document: DocumentRecord): DocumentRecord {
+  return {
+    ...document,
+    name: safeFileName(document.name),
+    hash: document.hash && /^[a-f\d]{64}$/i.test(document.hash) ? document.hash : undefined,
+    extractedText: safeStoredText(document.extractedText),
+    institution: document.institution ? safeStoredText(document.institution, 100) : undefined,
+    brand: document.brand ? safeStoredText(document.brand, 60) : undefined,
+    warnings: safeWarnings(document.warnings ?? []),
+    money: safeExpenses(document.money ?? []),
+    processingError: document.processingError
+      ? safeStoredText(document.processingError, 500)
+      : undefined,
+  };
+}
+
+function sanitizeFinanceEntries(entries: FinanceEntry[]) {
+  return entries.map((entry) => ({
+    ...entry,
+    description: safeStoredText(entry.description, 500),
+    source: entry.source ? safeStoredText(entry.source, 180) : undefined,
+    institution: entry.institution ? safeStoredText(entry.institution, 100) : undefined,
+    brand: entry.brand ? safeStoredText(entry.brand, 60) : undefined,
+  }));
+}
 
 function parseMarkers(value: string) {
   const markers: Record<string, number> = {};
@@ -89,10 +138,11 @@ function parseMarkers(value: string) {
 
 function classify(file: File, text: string): Kind {
   const combined = `${file.name} ${text}`;
-  if (healthTerms.test(combined)) return "saude";
-  if (financeTerms.test(combined) || parseExpenseLines(text).length > 0) {
-    return "financeiro";
-  }
+  if (statementSectionTerms.test(text) && explicitFinanceTerms.test(combined)) return "financeiro";
+  const healthDocument = healthTerms.test(combined);
+  if (healthDocument) return "saude";
+  if (parseCardStatement(text).expenses.length > 0 || parseExpenseLines(text).length > 0) return "financeiro";
+  if (financeTerms.test(combined)) return "financeiro";
   return "geral";
 }
 
@@ -110,40 +160,6 @@ function needsOcr(file: File) {
   return file.type.startsWith("image/") ||
     file.type === "application/pdf" ||
     /\.(pdf|jpe?g|png|tiff?|webp)$/i.test(file.name);
-}
-
-async function upsertFinanceEntries(document: DocumentRecord) {
-  const current = await readLocal<FinanceEntry[]>("irisFinances", []);
-  const prefix = `${document.id}:expense:`;
-  const currentForDocument = new Map(
-    current
-      .filter((entry) =>
-        entry.sourceDocumentId === document.id || entry.id.startsWith(prefix),
-      )
-      .map((entry) => [entry.id, entry]),
-  );
-  const retained = current.filter(
-    (entry) =>
-      entry.sourceDocumentId !== document.id && !entry.id.startsWith(prefix),
-  );
-  const parsedLines = document.kind === "financeiro" ? document.money : [];
-  const generated = parsedLines.map((line, index): FinanceEntry => {
-    const id = `${document.id}:expense:${index}`;
-    const previous = currentForDocument.get(id);
-    return {
-      id,
-      type: "expense",
-      description: line.source,
-      category: previous?.category ?? line.category,
-      amount: line.amount,
-      status: "open",
-      createdAt: previous?.createdAt ?? document.createdAt,
-      dueAt: previous?.dueAt ?? "",
-      source: document.name,
-      sourceDocumentId: document.id,
-    };
-  });
-  await writeLocal("irisFinances", [...generated, ...retained]);
 }
 
 export default function DocumentVault() {
@@ -169,14 +185,36 @@ export default function DocumentVault() {
   }, []);
 
   const save = async (next: DocumentRecord[]) => {
-    setItems(next);
-    await writeLocal("irisDocuments", next);
+    const sanitized = next.map(sanitizeDocumentForStorage);
+    setItems(sanitized);
+    await writeLocal("irisDocuments", sanitized);
   };
 
   const persistDocument = async (document: DocumentRecord) => {
     const latest = await readLocal<DocumentRecord[]>("irisDocuments", items);
     const next = [document, ...latest.filter((item) => item.id !== document.id)];
     await save(next);
+  };
+
+  const upsertFinanceEntries = async (document: DocumentRecord) => {
+    const safeDocument = sanitizeDocumentForStorage(document);
+    const [latestDocuments, currentFinances] = await Promise.all([
+      readLocal<DocumentRecord[]>("irisDocuments", items),
+      readLocal<FinanceEntry[]>("irisFinances", []),
+    ]);
+    const nextDocuments = [safeDocument, ...latestDocuments
+      .filter((item) => item.id !== safeDocument.id)
+      .map(sanitizeDocumentForStorage)];
+    if (safeDocument.kind === "financeiro" && safeDocument.money.length > 0) {
+      const nextFinances = sanitizeFinanceEntries(
+        buildStatementEntries(safeDocument, currentFinances),
+      );
+      await writeLocalBatch({ irisDocuments: nextDocuments, irisFinances: nextFinances });
+    } else {
+      // Empty/failed OCR never clears previously saved expense entries.
+      await writeLocal("irisDocuments", nextDocuments);
+    }
+    setItems(nextDocuments);
   };
 
   const ingest = async (files: FileList | null) => {
@@ -196,10 +234,17 @@ export default function DocumentVault() {
       try {
         assertLocalFileSize(file, file.name);
       } catch {
-        rejectedForSize.push(file.name);
+        rejectedForSize.push(safeFileName(file.name));
         continue;
       }
-      const hash = `${file.name.toLowerCase()}|${file.size}|${file.lastModified}`;
+      let hash: string;
+      try {
+        hash = await financialFileHash(file);
+      } catch {
+        failures += 1;
+        setMessage("Não foi possível calcular uma impressão digital local segura; este arquivo não foi arquivado.");
+        continue;
+      }
       if (knownHashes.has(hash)) {
         duplicates += 1;
         continue;
@@ -208,7 +253,7 @@ export default function DocumentVault() {
 
       const record: DocumentRecord = {
         id: crypto.randomUUID(),
-        name: file.name,
+        name: safeFileName(file.name),
         mime: file.type || "application/octet-stream",
         size: file.size,
         folder: "Documentos",
@@ -223,40 +268,58 @@ export default function DocumentVault() {
         hash,
         reviewStatus: "pending",
         confidence: 0,
-        blob: file,
+        // Keep the exact original bytes and MIME type locally without persisting its raw filename.
+        blob: new Blob([file], { type: file.type || "application/octet-stream" }),
         processing: true,
       };
 
       try {
         // Persist the original and expose its row before starting PDF/OCR work.
         const latest = await readLocal<DocumentRecord[]>("irisDocuments", currentItems);
-        currentItems = [record, ...latest.filter((item) => item.id !== record.id)];
+        currentItems = [record, ...latest.filter((item) => item.id !== record.id)]
+          .map(sanitizeDocumentForStorage);
         setItems(currentItems);
         await writeLocal("irisDocuments", currentItems);
         archived += 1;
       } catch (error) {
         failures += 1;
         setMessage(
-          `Não foi possível arquivar ${file.name}; o processamento desse arquivo foi ignorado e o lote continuará.${error instanceof Error ? ` ${error.message}` : ""}`,
+          `Não foi possível arquivar ${safeFileName(file.name)}; o processamento desse arquivo foi ignorado e o lote continuará.${error instanceof Error ? ` ${safeStoredText(error.message, 500)}` : ""}`,
         );
         continue;
       }
 
       try {
-        setMessage(`Original de ${file.name} salvo localmente. Iniciando leitura…`);
-        const reading = await readDocumentText(file, ({ progress, status }) => {
+        setMessage(`Original de ${record.name} salvo localmente. Iniciando leitura…`);
+        const onProgress = ({ progress, status }: { progress: number; status: string }) => {
           setMessage(
-            `${file.name} · ${status} (${Math.round(progress * 100)}%). Original já salvo localmente.`,
+            `${record.name} · ${status} (${Math.round(progress * 100)}%). Original já salvo localmente.`,
           );
-        });
-        const reliable =
-          Boolean(reading.text) &&
-          (reading.method !== "ocr" || reading.confidence >= 45);
-        const kind = classify(file, reading.text);
-        const money =
-          reliable && kind === "financeiro"
-            ? parseExpenseLines(reading.text)
-            : [];
+        };
+        let financialRead: Awaited<ReturnType<typeof readFinancialDocument>> | undefined;
+        let reading: DocumentReadResult;
+        let kind: Kind;
+        if (record.kind === "financeiro") {
+          financialRead = await readFinancialDocument(file, onProgress);
+          reading = financialRead.reading;
+          kind = "financeiro";
+        } else {
+          reading = await readDocumentText(file, onProgress);
+          kind = classify(file, reading.text);
+          if (kind === "financeiro") {
+            financialRead = await readFinancialDocument(file, onProgress);
+            reading = financialRead.reading;
+          }
+        }
+        const reliable = financialRead?.reliable ?? (
+          Boolean(reading.text) && (reading.method !== "ocr" || reading.confidence >= 45)
+        );
+        const parsedExpenses = financialRead?.statement.expenses ?? [];
+        const money = reliable && kind === "financeiro" ? safeExpenses(parsedExpenses) : [];
+        const statement = financialRead?.statement;
+        const warnings = financialRead
+          ? safeWarnings([...(statement?.warnings ?? []), ...(reading.warning ? [reading.warning] : [])])
+          : [];
         const updated: DocumentRecord = {
           ...record,
           folder:
@@ -266,28 +329,30 @@ export default function DocumentVault() {
                 ? "Financeiro"
                 : "Documentos",
           kind,
-          extractedText: reliable ? reading.text : "",
+          extractedText: reliable ? safeStoredText(reading.text) : "",
           analysis: reliable
             ? "texto extraído"
             : needsOcr(file)
               ? "arquivado · OCR necessário"
               : "arquivado · formato não textual",
-          institution: reading.text
-            .match(/(?:banco|bank)\s*[:\-]?\s*([A-ZÀ-Ú][\wÀ-Ú ]{2,40})/i)?.[1]
-            ?.trim(),
-          brand:
-            reading.text.match(/\b(Visa|Mastercard|Elo|American Express|Amex)\b/i)?.[1] ??
-            undefined,
+          institution: reliable && statement?.institution
+            ? safeStoredText(statement.institution, 100)
+            : undefined,
+          brand: reliable && statement?.brand
+            ? safeStoredText(statement.brand, 60)
+            : undefined,
           total: money.reduce((sum, line) => sum + line.amount, 0) || undefined,
+          statementTotal: reliable ? statement?.statementTotal : undefined,
+          warnings,
           money,
           markers: kind === "saude" && reliable ? parseMarkers(reading.text) : {},
           confidence: reading.confidence / 100,
           processing: false,
           processingError: undefined,
         };
-        await persistDocument(updated);
         currentItems = [updated, ...currentItems.filter((item) => item.id !== updated.id)];
-        await upsertFinanceEntries(updated);
+        if (updated.kind === "financeiro") await upsertFinanceEntries(updated);
+        else await persistDocument(updated);
       } catch (error) {
         failures += 1;
         const latestRecords = await readLocal<DocumentRecord[]>("irisDocuments", currentItems).catch(
@@ -297,8 +362,10 @@ export default function DocumentVault() {
         const failed: DocumentRecord = {
           ...latestRecord,
           processing: false,
-          processingError:
+          processingError: safeStoredText(
             error instanceof Error ? error.message : "Falha durante a leitura local.",
+            500,
+          ),
         };
         try {
           await persistDocument(failed);
@@ -349,33 +416,58 @@ export default function DocumentVault() {
     );
   };
 
-  const runOcr = async (item: DocumentRecord) => {
+  const runOcr = async (item: DocumentRecord, forceOcr = false) => {
     setOcrId(item.id);
     setMessage("Leitura local em andamento. O original permanece arquivado neste dispositivo.");
 
-    const started: DocumentRecord = { ...item, processing: true, processingError: undefined };
+    let started: DocumentRecord = {
+      ...item,
+      name: safeFileName(item.name),
+      hash: undefined,
+      processing: true,
+      processingError: undefined,
+    };
     try {
-      await persistDocument(started);
       const source = item.blob ?? (item.storageKey ? await downloadIrisFile(item.id) : null);
       if (!source) {
         throw new Error("O arquivo original não está disponível para leitura local.");
       }
 
-      const file = new File([source], item.name, { type: item.mime });
-      const reading = await readDocumentText(file, ({ progress, status }) => {
+      started = { ...started, hash: await financialFileHash(source) };
+      await persistDocument(started);
+      const file = new File([source], started.name, { type: item.mime });
+      const onProgress = ({ progress, status }: { progress: number; status: string }) => {
         setMessage(`Leitura local de ${item.name} · ${status} (${Math.round(progress * 100)}%).`);
-      });
-      const reliable =
-        Boolean(reading.text) &&
-        (reading.method !== "ocr" || reading.confidence >= 45);
-      const kind = reading.text ? classify(file, reading.text) : item.kind;
-      const money = reliable
-        ? kind === "financeiro"
-          ? parseExpenseLines(reading.text)
-          : []
-        : item.money;
+      };
+      let financialRead: Awaited<ReturnType<typeof readFinancialDocument>> | undefined;
+      let reading: DocumentReadResult;
+      let kind: Kind;
+      if (item.kind === "financeiro" || classify(file, "") === "financeiro") {
+        financialRead = await readFinancialDocument(file, onProgress, forceOcr);
+        reading = financialRead.reading;
+        kind = "financeiro";
+      } else {
+        reading = await readDocumentText(file, onProgress);
+        kind = reading.text ? classify(file, reading.text) : item.kind;
+        if (kind === "financeiro") {
+          financialRead = await readFinancialDocument(file, onProgress, forceOcr);
+          reading = financialRead.reading;
+        }
+      }
+      const reliable = financialRead?.reliable ?? (
+        Boolean(reading.text) && (reading.method !== "ocr" || reading.confidence >= 45)
+      );
+      const parsedExpenses = financialRead?.statement.expenses ?? [];
+      const parsedMoney = reliable && kind === "financeiro" ? safeExpenses(parsedExpenses) : [];
+      const money = reliable && kind === "financeiro"
+        ? parsedMoney.length > 0 ? parsedMoney : item.money
+        : reliable ? [] : item.money;
+      const statement = financialRead?.statement;
+      const warnings = financialRead && reliable
+        ? safeWarnings([...(statement?.warnings ?? []), ...(reading.warning ? [reading.warning] : [])])
+        : item.warnings ?? [];
       const updated: DocumentRecord = {
-        ...item,
+        ...started,
         folder:
           kind === "saude"
             ? "Exames"
@@ -383,33 +475,37 @@ export default function DocumentVault() {
               ? "Financeiro"
               : item.folder,
         kind,
-        extractedText: reliable ? reading.text : item.extractedText,
+        extractedText: reliable ? safeStoredText(reading.text) : item.extractedText,
         analysis: reliable ? "texto extraído" : item.analysis,
-        institution: reliable
-          ? reading.text
-              .match(/(?:banco|bank)\s*[:\-]?\s*([A-ZÀ-Ú][\wÀ-Ú ]{2,40})/i)?.[1]
-              ?.trim()
+        institution: reliable && statement?.institution
+          ? safeStoredText(statement.institution, 100)
           : item.institution,
-        brand: reliable
-          ? reading.text.match(/\b(Visa|Mastercard|Elo|American Express|Amex)\b/i)?.[1]
+        brand: reliable && statement?.brand
+          ? safeStoredText(statement.brand, 60)
           : item.brand,
-        total: money.reduce((sum, line) => sum + line.amount, 0) || undefined,
+        total: money.length > 0
+          ? money.reduce((sum, line) => sum + line.amount, 0)
+          : item.total,
+        statementTotal: reliable && statement?.statementTotal !== undefined
+          ? statement.statementTotal
+          : item.statementTotal,
+        warnings,
         money,
         markers: reliable
           ? kind === "saude"
             ? parseMarkers(reading.text)
             : {}
           : item.markers,
-        confidence: reading.confidence / 100,
+        confidence: reliable ? reading.confidence / 100 : item.confidence,
         processing: false,
         processingError: undefined,
       };
-      await persistDocument(updated);
-      await upsertFinanceEntries(updated);
+      if (updated.kind === "financeiro") await upsertFinanceEntries(updated);
+      else await persistDocument(updated);
       setMessage(
         reliable
-          ? `Leitura local concluída · confiança ${Math.round(reading.confidence)}%.${reading.warning ? ` ${reading.warning}` : ""}`
-          : `Documento continua pendente: leitura insuficiente (confiança ${Math.round(reading.confidence)}%).${reading.warning ? ` ${reading.warning}` : ""}`,
+          ? `Leitura local concluída · confiança ${Math.round(reading.confidence)}%.${reading.warning ? ` ${safeStoredText(reading.warning, 500)}` : ""}`
+          : `Documento continua pendente: leitura insuficiente (confiança ${Math.round(reading.confidence)}%).${reading.warning ? ` ${safeStoredText(reading.warning, 500)}` : ""}`,
       );
     } catch (error) {
       const latestRecords = await readLocal<DocumentRecord[]>("irisDocuments", items).catch(
@@ -419,8 +515,10 @@ export default function DocumentVault() {
       const failed = {
         ...latestRecord,
         processing: false,
-        processingError:
+        processingError: safeStoredText(
           error instanceof Error ? error.message : "OCR local indisponível.",
+          500,
+        ),
       };
       await persistDocument(failed).catch(() => undefined);
       setMessage(
@@ -472,11 +570,11 @@ export default function DocumentVault() {
 
   const exportCsv = () => {
     const rows = [
-      ["arquivo", "periodo", "categoria", "valor", "bandeira", "instituicao"],
+      ["arquivo", "data", "categoria", "valor", "bandeira", "instituicao"],
       ...financeItems.flatMap((item) =>
         item.money.map((entry) => [
           item.name,
-          item.createdAt.slice(0, 7),
+          entry.date ?? item.createdAt.slice(0, 10),
           entry.category,
           entry.amount.toFixed(2),
           item.brand ?? "",
@@ -519,7 +617,7 @@ export default function DocumentVault() {
           <p>
             PDF, imagens, texto e CSV até 50 MB por arquivo. Para analisar uma planilha Excel, salve ou exporte como CSV.
             PDFs aceitos para OCR têm até 100 páginas e 16 milhões de pixels por página.
-            O original é salvo no navegador antes da leitura local e nunca é enviado automaticamente.
+            O original fica local, sem alterar seu conteúdo, e pode conter números identificadores. Textos e lançamentos derivados são mascarados e não são enviados a armazenamentos remotos.
           </p>
         </div>
         <label className="button-like">
@@ -624,7 +722,9 @@ export default function DocumentVault() {
                       Confirmar revisão
                     </button>
                   )}
-                  {!item.extractedText && (item.blob || item.storageKey) && (
+                  {(item.kind === "financeiro"
+                    ? Boolean(item.blob || item.storageKey)
+                    : !item.extractedText && Boolean(item.blob || item.storageKey)) && (
                     <button
                       className="document-confirm"
                       type="button"
@@ -632,16 +732,40 @@ export default function DocumentVault() {
                       onClick={() => void runOcr(item)}
                     >
                       <ScanText size={14} />{" "}
-                      {ocrId === item.id ? "Lendo localmente…" : "Tentar leitura local"}
+                      {ocrId === item.id
+                        ? "Lendo localmente…"
+                        : item.kind === "financeiro" && item.extractedText
+                          ? "Reprocessar fatura"
+                          : "Tentar leitura local"}
+                    </button>
+                  )}
+                  {item.kind === "financeiro" && item.blob && (
+                    <button
+                      className="document-confirm"
+                      type="button"
+                      disabled={ocrId === item.id || item.processing}
+                      onClick={() => void runOcr(item, true)}
+                    >
+                      <ScanText size={14} /> Forçar OCR
                     </button>
                   )}
                   {item.kind === "financeiro" && (
                     <small>
                       {item.brand ?? "Bandeira não identificada"}
-                      {item.institution ? ` · ${item.institution}` : ""}
-                      {item.total ? ` · R$ ${item.total.toFixed(2).replace(".", ",")}` : ""}
+                      {` · ${item.institution ?? "Instituição não identificada"}`}
+                      {item.total !== undefined ? ` · Soma identificada: R$ ${item.total.toFixed(2).replace(".", ",")}` : ""}
                     </small>
                   )}
+                  {item.kind === "financeiro" && item.statementTotal !== undefined && (
+                    <small>
+                      Total informado na fatura: R$ {item.statementTotal.toFixed(2).replace(".", ",")} · comparação com lançamentos é informativa.
+                    </small>
+                  )}
+                  {item.kind === "financeiro" && item.warnings?.map((warning, index) => (
+                    <small className="document-warn" key={`${item.id}-warning-${index}`}>
+                      Conferência informativa: {warning}
+                    </small>
+                  ))}
                   {(item.blob || item.storageKey) && (
                     <button
                       className="document-confirm"

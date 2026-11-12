@@ -1,4 +1,5 @@
 import { strFromU8, strToU8, unzipSync, zipSync } from "fflate";
+import { sanitizeFinancialRecords } from "@shared/financialPrivacy";
 
 // Limite defensivo por arquivo local; mantém faturas usuais e evita leituras sem limite.
 export const MAX_LOCAL_FILE_BYTES = 50 * 1024 * 1024;
@@ -94,8 +95,14 @@ export async function readLocal<T>(key: string, fallback: T): Promise<T> {
       .objectStore(STORE)
       .get(key);
     request.onerror = () => reject(request.error);
-    request.onsuccess = () =>
-      resolve((request.result as T | undefined) ?? fallback);
+    request.onsuccess = () => {
+      const original = (request.result as T | undefined) ?? fallback;
+      const safe = key === "irisFinances" || key === "irisDocuments" ? sanitizeFinancialRecords(original) : original;
+      db.close();
+      if (safe !== original) {
+        void writeLocal(key, safe).then(() => resolve(safe), () => resolve(safe));
+      } else resolve(safe);
+    };
   });
 }
 
@@ -104,7 +111,7 @@ export async function writeLocal<T>(key: string, value: T): Promise<void> {
   const db = await openDb();
   return new Promise((resolve, reject) => {
     const transaction = db.transaction(STORE, "readwrite");
-    transaction.objectStore(STORE).put(value, key);
+    transaction.objectStore(STORE).put(key === "irisFinances" || key === "irisDocuments" ? sanitizeFinancialRecords(value) : value, key);
     transaction.onabort = () => { db.close(); reject(transaction.error ?? new Error("Gravação local interrompida.")); };
     transaction.onerror = () => { db.close(); reject(transaction.error ?? new Error("Falha no armazenamento local.")); };
     transaction.oncomplete = () => { db.close(); window.dispatchEvent(new Event("iris-local-changed")); resolve(); };
@@ -118,7 +125,7 @@ export async function writeLocalBatch(values: Record<string, unknown>): Promise<
   return new Promise((resolve, reject) => {
     const transaction = db.transaction(STORE, "readwrite");
     const store = transaction.objectStore(STORE);
-    for (const [key, value] of Object.entries(values)) store.put(value, key);
+    for (const [key, value] of Object.entries(values)) store.put(key === "irisFinances" || key === "irisDocuments" ? sanitizeFinancialRecords(value) : value, key);
     transaction.onabort = () => {
       db.close();
       reject(transaction.error ?? new Error("Restauração local interrompida; nenhum dado foi substituído."));
@@ -470,7 +477,9 @@ export function downloadBlob(filename: string, value: BlobPart, type: string) {
 }
 
 export function downloadJson(filename: string, value: unknown) {
-  downloadBlob(filename, JSON.stringify(value, null, 2), "application/json");
+  const safe = value && typeof value === "object" && "format" in value &&
+    (value.format === "iris-finances" || value.format === "iris-local-backup") ? sanitizeFinancialRecords(value) : value;
+  downloadBlob(filename, JSON.stringify(safe, null, 2), "application/json");
   if (value && typeof value === "object" && "format" in value && value.format === "iris-local-backup")
     localStorage.setItem("iris.lastBackupAt", new Date().toISOString());
 }

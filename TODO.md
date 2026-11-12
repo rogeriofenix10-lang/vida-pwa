@@ -35,3 +35,8 @@
 - [x] Após validar a senha mestra uma vez neste navegador/dispositivo, manter acesso remoto ao reabrir ou recarregar sem salvar a senha mestra. Usar credencial rotativa de dispositivo com 90 dias de inatividade, renovação automática, expiração e revogação em Configurações. Expiração/revogação/limpeza do navegador exigem nova validação.
 - [x] Após validar o PIN local uma vez, permitir lembrar este navegador e não pedi-lo a cada reabertura; invalidar lembrança ao trocar/remover o PIN. Distinguir explicitamente PIN local da senha mestra remota.
 - [x] Recuperar PIN local esquecido pela validação da senha mestra remota, removendo somente a proteção PIN e preservando documentos, finanças, catálogo e demais dados locais. Mostrar/ocultar entrada e mensagens claras de rede/credencial incorreta.
+
+# Leitura e agrupamento de faturas de cartão (12/11/2026)
+- [x] Ler PDFs de gastos de cartão com camada textual ou OCR, interpretar transações individuais, identificar e agrupar segmentos como Hotel, Restaurante e Posto de combustível, além de outras categorias reconhecíveis, sem duplicar totais, pagamentos ou reimportações. Exibir itens incertos para revisão, sem inventar despesas.
+- [x] Identificar somente bandeira e instituição financeira quando legíveis; não extrair números de conta/cartão, nem mantê-los em descrições, texto derivado, nomes exibidos ou relatórios/exportações de análise. O original é documento local separado e não é enviado automaticamente.
+- [x] Permitir nova leitura dos arquivos já importados sem lançamentos para que a correção possa ser aplicada à fatura que falhou; informar progresso, resultado e limitações.
