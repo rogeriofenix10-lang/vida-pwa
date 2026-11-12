@@ -52,6 +52,7 @@ type DocumentRecord = {
   brand?: string;
   total?: number;
   statementTotal?: number;
+  statementDueAt?: string;
   warnings?: string[];
   money: Money[];
   markers: Record<string, number>;
@@ -343,6 +344,7 @@ export default function DocumentVault() {
             : undefined,
           total: money.reduce((sum, line) => sum + line.amount, 0) || undefined,
           statementTotal: reliable ? statement?.statementTotal : undefined,
+          statementDueAt: reliable ? statement?.statementDueAt : undefined,
           warnings,
           money,
           markers: kind === "saude" && reliable ? parseMarkers(reading.text) : {},
@@ -489,6 +491,9 @@ export default function DocumentVault() {
         statementTotal: reliable && statement?.statementTotal !== undefined
           ? statement.statementTotal
           : item.statementTotal,
+        statementDueAt: reliable && statement?.statementDueAt !== undefined
+          ? statement.statementDueAt
+          : item.statementDueAt,
         warnings,
         money,
         markers: reliable
@@ -693,6 +698,7 @@ export default function DocumentVault() {
                   <small>
                     {labelKind(item.kind)} · pasta {item.folder} · {(item.size / 1024).toFixed(0)} KB
                   </small>
+                  {item.kind === "financeiro" && item.statementDueAt && <small>Vencimento da fatura: {item.statementDueAt.split("-").reverse().join("/")}</small>}
                   {item.processing && (
                     <small className="document-warn">
                       Processando localmente… o original já foi salvo neste dispositivo.

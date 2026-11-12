@@ -1,43 +1,43 @@
 import { describe, expect, it } from "vitest";
-import { parseCardStatement, redactFinancialIdentifiers } from "./cardStatement";
+import { extractStatementDueAt, parseCardStatement, redactFinancialIdentifiers } from "./cardStatement";
 
 describe("parseCardStatement", () => {
   it("usa somente linhas datadas das transações e evita advice, pagamentos e valores de continuação", () => {
     const text = [
       "Nu Pagamentos S.A.",
-      "FATURA 21 OUT 2026",
+      "FATURA 17 MAI 2028",
       "ALTERNATIVAS DE PAGAMENTO",
-      "Total a pagar R$ 12.325,50 R$ 14.533,57",
-      "Pagamento mínimo R$ 2.381,03",
+      "Total a pagar R$ 4.125,80 R$ 5.030,20",
+      "Pagamento mínimo R$ 400,00",
       "RESUMO DA FATURA ATUAL",
-      "Total a pagar R$ 9.805,36",
-      "TRANSAÇÕES DE 14 SET A 14 OUT",
-      "14 SET 4111 1111 1111 1111 Luna Atelier - Parcela 01/03 R$ 123, 45",
-      "14 SET 5555 4444 3333 2222 Luna Atelier - Parcela 02/03 R$ 123, 45",
-      "15 SET 4111 1111 1111 1111 Nimbus Store R$ 29,00",
-      "15 SET 4111 1111 1111 1111 Nimbus Store R$ 29,00",
-      "17 SET IOF de Loja Cósmica R$ 6,14",
-      "23 SET Pagamento em 23 SET −R$ 600,00",
-      "23 SET Crédito de atraso −R$ 5.336,16",
-      "23 SET Saldo em atraso R$ 5.336,16",
-      "23 SET Encerramento de dívida −R$ 14,22",
-      "23 SET IOF Complementar por renegociação R$ 0,08",
-      "Referente ao valor em aberto de R$ 500,00 de 05/09/2026 (Valor original: R$ 502,57)",
-      "PYG 191205.00 = USD 32.78",
-      "24 SET Multa de atraso R$ 10,54",
-      "24 SET Juros de atraso R$ 3,60",
+      "Total a pagar R$ 3.210,00",
+      "TRANSAÇÕES DE 01 MAI A 14 MAI",
+      "14 MAI 4111 1111 1111 1111 Luna Atelier - Parcela 01/03 R$ 123, 45",
+      "14 MAI 5555 4444 3333 2222 Luna Atelier - Parcela 02/03 R$ 123, 45",
+      "15 MAI 4111 1111 1111 1111 Nimbus Store R$ 29,00",
+      "15 MAI 4111 1111 1111 1111 Nimbus Store R$ 29,00",
+      "17 MAI IOF de Loja Cósmica R$ 2,14",
+      "23 MAI Pagamento em 23 MAI −R$ 100,00",
+      "23 MAI Crédito de atraso −R$ 10,00",
+      "23 MAI Saldo em atraso R$ 10,00",
+      "23 MAI Encerramento de dívida −R$ 1,00",
+      "23 MAI IOF Complementar por renegociação R$ 0,03",
+      "Referente ao valor em aberto de R$ 50,00 de 12/05/2028 (Valor original: R$ 50,25)",
+      "Conversão estrangeira ilustrativa, sem linha datada",
+      "24 MAI Multa de atraso R$ 8,50",
+      "24 MAI Juros de atraso R$ 1,20",
     ].join("\n");
 
     const statement = parseCardStatement(text);
     expect(statement.institution).toBe("Nubank");
     expect(statement.brand).toBeUndefined();
-    expect(statement.statementTotal).toBe(9805.36);
-    expect(statement.expenses.map(row => row.amount)).toEqual([123.45, 123.45, 29, 29, 6.14, 0.08, 10.54, 3.6]);
+    expect(statement.statementTotal).toBe(3210);
+    expect(statement.expenses.map(row => row.amount)).toEqual([123.45, 123.45, 29, 29, 2.14, 0.03, 8.5, 1.2]);
     expect(statement.expenses.slice(0, 4).map(row => row.category)).toEqual(["Outros", "Outros", "Outros", "Outros"]);
     expect(statement.expenses.slice(4).map(row => row.category)).toEqual([
       "Tarifas e juros", "Tarifas e juros", "Tarifas e juros", "Tarifas e juros",
     ]);
-    expect(statement.expenses[0].date).toBe("14 SET");
+    expect(statement.expenses[0].date).toBe("14 MAI");
     expect(statement.expenses[0].source).toContain("Parcela 01/03");
     expect(statement.expenses.every(row => !/4111 1111|5555 4444|123456|9876/.test(row.source))).toBe(true);
     expect(statement.warnings.some(warning => warning.includes("somente linhas datadas"))).toBe(true);
@@ -101,5 +101,37 @@ describe("parseCardStatement", () => {
     expect(statement.brand).toBe("Visa");
     expect(JSON.stringify(statement)).not.toContain("4321");
     expect(redactFinancialIdentifiers("Cartão Nubank final 8765")).not.toContain("8765");
+  });
+
+  it.each([
+    ["Vencimento: 17/05/2028", "2028-05-17"],
+    ["Data de vencimento: 2028-05-17", "2028-05-17"],
+    ["Fatura 17 MAI 2028 | Vencimento 17 MAI 2028", "2028-05-17"],
+    ["Pagar até: 17 de maio de 2028", "2028-05-17"],
+    ["Data de vencimento:\n17 de maio de 2028", "2028-05-17"],
+    ["Pagar até\n17 MAI 2028", "2028-05-17"],
+  ])("extrai somente data completa explicitamente rotulada: %s", (text, expected) => {
+    expect(extractStatementDueAt(text)).toBe(expected);
+  });
+
+  it("não infere ano nem aceita datas impossíveis", () => {
+    expect(extractStatementDueAt("Vencimento: 21 OUT")).toBeUndefined();
+    expect(extractStatementDueAt("Data de vencimento: 31/02/2026")).toBeUndefined();
+    expect(extractStatementDueAt("Vencimento: 2026-02-29")).toBeUndefined();
+  });
+
+  it("ignora datas de transações e avisa quando os vencimentos explícitos conflitam", () => {
+    const transactionOnly = [
+      "Resumo da fatura", "Total a pagar R$ 90,00", "TRANSAÇÕES",
+      "14 SET Vencimento 17/05/2028 Loja Alfa R$ 20,00",
+    ].join("\n");
+    expect(extractStatementDueAt(transactionOnly)).toBeUndefined();
+
+    const conflicting = parseCardStatement([
+      "Resumo da fatura", "Vencimento 17 MAI 2028", "Data de vencimento: 18/05/2028",
+      "TRANSAÇÕES", "14 SET Loja Alfa R$ 20,00",
+    ].join("\n"));
+    expect(conflicting.statementDueAt).toBeUndefined();
+    expect(conflicting.warnings.some((warning) => warning.includes("vencimentos explícitos divergentes"))).toBe(true);
   });
 });

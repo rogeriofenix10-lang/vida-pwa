@@ -40,3 +40,8 @@
 - [x] Ler PDFs de gastos de cartão com camada textual ou OCR, interpretar transações individuais, identificar e agrupar segmentos como Hotel, Restaurante e Posto de combustível, além de outras categorias reconhecíveis, sem duplicar totais, pagamentos ou reimportações. Exibir itens incertos para revisão, sem inventar despesas.
 - [x] Identificar somente bandeira e instituição financeira quando legíveis; não extrair números de conta/cartão, nem mantê-los em descrições, texto derivado, nomes exibidos ou relatórios/exportações de análise. O original é documento local separado e não é enviado automaticamente.
 - [x] Permitir nova leitura dos arquivos já importados sem lançamentos para que a correção possa ser aplicada à fatura que falhou; informar progresso, resultado e limitações.
+
+# Reconciliação e vencimento da fatura do cartão (12/11/2026)
+- [x] Mostrar com destaque o total a pagar conforme o PDF separado da soma de despesas individualizadas; explicar que saldo anterior, pagamentos, créditos e ajustes podem fazer os valores diferirem e nunca somar o total da fatura como uma nova despesa.
+- [x] Registrar e mostrar junto da fatura a data de vencimento apenas quando estiver legível e rotulada no documento; não inferir nem criar uma data quando ausente ou ambígua.
+- [x] Manter a data no resumo da fatura, sem copiá-la para cada compra ou marcar despesas individuais como vencidas.

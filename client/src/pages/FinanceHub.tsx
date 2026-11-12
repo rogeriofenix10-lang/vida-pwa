@@ -15,7 +15,7 @@ import { Button } from "@/components/ui/button";
 import { assertLocalFileSize, downloadJson, readLocal, writeLocal, writeLocalBatch } from "@/lib/irisLocalStore";
 import { buildStatementEntries, financialFileHash, groupExpenses, readFinancialDocument, type FinancialEntry } from "@/lib/financeDocuments";
 import { EXPENSE_CATEGORIES, inferExpenseCategory, type ExpenseCategory } from "@shared/expenseParser";
-import { redactFinancialIdentifiers } from "@shared/cardStatement";
+import { extractStatementDueAt, redactFinancialIdentifiers } from "@shared/cardStatement";
 import "./finance-hub.css";
 
 type Entry = FinancialEntry;
@@ -47,6 +47,7 @@ type StoredFinanceDocument = {
   institution?: string;
   brand?: string;
   statementTotal?: number;
+  statementDueAt?: string;
   warnings?: string[];
 };
 
@@ -60,6 +61,12 @@ const empty = {
 const expenseCategories = EXPENSE_CATEGORIES;
 const money = (value: number) =>
   value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+const displayDate = (value: string) => {
+  const [year, month, day] = value.split("-").map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  if (!year || !month || !day || date.getUTCFullYear() !== year || date.getUTCMonth() !== month - 1 || date.getUTCDate() !== day) return "Não identificado";
+  return date.toLocaleDateString("pt-BR", { timeZone: "UTC" });
+};
 
 async function upsertStoredDocument(document: StoredFinanceDocument) {
   const stored = await readLocal<StoredFinanceDocument[]>("irisDocuments", []);
@@ -81,7 +88,16 @@ export default function FinanceHub() {
       readLocal<Entry[]>("irisFinances", []),
       readLocal<StoredFinanceDocument[]>("irisDocuments", []),
     ]).then(([entries, docs]) => {
-      if (active) { setItems(entries); setDocuments(docs); }
+      const enrichedDocs = docs.map((doc) => {
+        if (doc.statementDueAt || doc.kind !== "financeiro" || !doc.extractedText) return doc;
+        const statementDueAt = extractStatementDueAt(doc.extractedText);
+        return statementDueAt ? { ...doc, statementDueAt } : doc;
+      });
+      if (active) { setItems(entries); setDocuments(enrichedDocs); }
+      if (active && enrichedDocs.some((doc, index) => doc !== docs[index])) {
+        void writeLocal("irisDocuments", enrichedDocs)
+          .catch(() => { if (active) setMessage("Vencimento identificado, mas não foi possível salvá-lo neste navegador. Use Ler novamente para tentar salvar."); });
+      }
     }).catch(() => { if (active) setMessage("Não foi possível abrir os lançamentos locais."); });
     load();
     window.addEventListener("iris-local-changed", load);
@@ -185,6 +201,7 @@ export default function FinanceHub() {
         institution: statement.institution ?? document.institution,
         brand: statement.brand ?? document.brand,
         statementTotal: statement.statementTotal ?? document.statementTotal,
+        statementDueAt: statement.statementDueAt ?? document.statementDueAt,
         warnings,
         confidence: result.confidence / 100,
         processing: false,
@@ -271,7 +288,10 @@ export default function FinanceHub() {
         item.status === "open"),
   );
   const groups = useMemo(() => groupExpenses(items), [items]);
-  const financialDocuments = documents.filter((doc) => doc.kind === "financeiro" || doc.folder === "Financeiro");
+  const financialDocuments = documents.filter((doc) => doc.kind === "financeiro" || doc.folder === "Financeiro")
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  const invoiceDocuments = financialDocuments.filter((doc) =>
+    typeof doc.statementTotal === "number" || Boolean(doc.statementDueAt) || Boolean(doc.institution) || Boolean(doc.brand));
   const filteredItems = categoryFilter === "all" ? items : items.filter((item) => (item.category ?? "Outros") === categoryFilter);
 
   return (
@@ -320,12 +340,27 @@ export default function FinanceHub() {
           <small className="finance-privacy-note">O PDF original permanece local e inalterado: ele pode conter dados pessoais. Não é enviado automaticamente, e os relatórios derivados não incluem números de conta/cartão.</small>
         </section>
 
+        {invoiceDocuments.length > 0 && <section className="finance-card finance-invoice-overview" aria-label="Total e vencimento das faturas de cartão">
+          <h2><WalletCards size={22} /> Faturas do cartão · pagamento</h2>
+          <p className="finance-privacy-note">Total a pagar informado no PDF. Este valor é separado dos gastos por segmento e não é somado novamente como despesa. Saldo anterior, pagamentos, créditos, estornos e ajustes podem fazer os totais diferirem; use o valor do PDF como referência de pagamento.</p>
+          {invoiceDocuments.map((doc) => <div className="finance-invoice-payment" key={doc.id}>
+            <div className="finance-invoice-header"><b>{doc.name}</b><small>{doc.institution ?? "Instituição não identificada"} · {doc.brand ?? "Bandeira não identificada"}</small></div>
+            <div className="finance-invoice-metrics">
+              <div><span>Total da fatura a pagar</span><strong>{typeof doc.statementTotal === "number" ? money(doc.statementTotal) : "Não identificado"}</strong></div>
+              <div><span>Vencimento indicado no PDF</span><strong>{doc.statementDueAt ? displayDate(doc.statementDueAt) : "Não identificado"}</strong></div>
+            </div>
+            <small>Despesas individualizadas (soma bruta): {money((doc.money ?? []).reduce((sum, row) => sum + row.amount, 0))} · {doc.money?.length ?? 0} lançamento(s). Não representa o total a pagar.</small>
+            {!doc.statementDueAt && <small>Use “Ler novamente” abaixo para extrair o vencimento do documento. Datas ausentes ou ambíguas não são adivinhadas.</small>}
+          </div>)}
+        </section>}
+
         <div className="finance-summary-grid">
           <div className="finance-summary-card">
             <WalletCards size={25} />
-            <span>A pagar</span>
+            <span>{invoiceDocuments.length ? "Despesas registradas" : "A pagar"}</span>
             <strong>{money(totals.expense)}</strong>
             <small>{items.filter((item) => item.type === "expense").length} lançamento(s)</small>
+            {invoiceDocuments.length > 0 && <small>Soma bruta dos itens; não é o total da fatura.</small>}
           </div>
           <div className="finance-summary-card">
             <WalletCards size={25} />
@@ -358,6 +393,7 @@ export default function FinanceHub() {
             <strong>{doc.name}</strong>
             <small>{doc.institution ?? "Instituição não identificada"} · {doc.brand ?? "Bandeira não identificada"} · {doc.money?.length ?? 0} lançamento(s)</small>
             {typeof doc.statementTotal === "number" && <small>Total informado na fatura: {money(doc.statementTotal)}. Pode incluir saldo anterior e ajustes, além dos gastos deste período.</small>}
+            <small>Vencimento indicado no PDF: {doc.statementDueAt ? displayDate(doc.statementDueAt) : "Não identificado no documento"}</small>
             {doc.warnings?.map((warning, index) => <small key={index} className="finance-warning">{warning}</small>)}
             <div className="finance-import-actions">
               <Button variant="outline" onClick={() => reprocess(doc)} disabled={busy || !doc.blob}>Ler novamente</Button>
@@ -422,6 +458,7 @@ export default function FinanceHub() {
                   format: "iris-finances",
                   exportedAt: new Date().toISOString(),
                   entries: items,
+                  statements: financialDocuments.map((doc) => ({ id: doc.id, name: doc.name, institution: doc.institution, brand: doc.brand, statementTotal: doc.statementTotal, statementDueAt: doc.statementDueAt })),
                 })
               }
             >
