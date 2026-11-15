@@ -45,3 +45,10 @@
 - [x] Mostrar com destaque o total a pagar conforme o PDF separado da soma de despesas individualizadas; explicar que saldo anterior, pagamentos, créditos e ajustes podem fazer os valores diferirem e nunca somar o total da fatura como uma nova despesa.
 - [x] Registrar e mostrar junto da fatura a data de vencimento apenas quando estiver legível e rotulada no documento; não inferir nem criar uma data quando ausente ou ambígua.
 - [x] Manter a data no resumo da fatura, sem copiá-la para cada compra ou marcar despesas individuais como vencidas.
+
+# Gestão financeira mês a mês (15/11/2026)
+- [x] Organizar receitas e despesas por mês/ano, com seleção clara do período e opção de consultar o histórico completo.
+- [x] Manter os lançamentos salvos localmente e disponíveis ao mudar de mês ou adicionar períodos novos; permitir conferência dos registros históricos, preservando exclusão somente como ação manual confirmada e oferecendo exportação/backup para cópia durável.
+- [x] Oferecer gerenciamento de receitas e gastos — cadastrar, editar, categorizar, marcar situação e excluir com confirmação — com filtros úteis no livro mensal.
+- [x] Mostrar gráfico responsivo, por mês, comparando receitas, despesas e saldo, com valores calculados apenas dos lançamentos reais e sem preencher meses sem dados como se houvesse movimento.
+- [x] Manter a experiência intuitiva, funcional, moderna e adequada ao celular, indicando que o arquivo local reside neste dispositivo.

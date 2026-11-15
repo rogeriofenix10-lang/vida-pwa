@@ -8,6 +8,7 @@ beforeEach(() => vi.clearAllMocks());
 describe("statement ledger integration", () => {
   it("reprocesses without duplicates and preserves manually reviewed category/status", () => {
     const first = buildStatementEntries<FinancialEntry>(doc, []);
+    expect(first[0].sourceLineKey).toEqual(expect.any(String));
     first[0].status = "paid";
     first[0].category = "Outros";
     const next = buildStatementEntries({ ...doc, money: [...doc.money].reverse() }, first);
@@ -38,11 +39,41 @@ describe("statement ledger integration", () => {
     const added = buildStatementEntries({ ...datedDocument, money: [doc.money[0]] }, []);
     expect(added[0].dueAt).toBe("");
   });
-  it("keeps unrelated entries while removing obsolete rows from a successful reparse", () => {
+  it("returns the same array without dropping rows when a reparse is partial", () => {
     const original = buildStatementEntries<FinancialEntry>(doc, []);
     const unrelated = { ...original[0], id: "manual", sourceDocumentId: undefined };
-    const next = buildStatementEntries({ ...doc, money: [doc.money[0]] }, [...original, unrelated]);
-    expect(next.map((item) => item.id)).toEqual([original[0].id, "manual"]);
+    const current = [...original, unrelated];
+    const next = buildStatementEntries({ ...doc, money: [doc.money[0]] }, current);
+    expect(next).toBe(current);
+    expect(next.map((item) => item.id)).toEqual([original[0].id, original[1].id, "manual"]);
+  });
+  it("matches signed source lines after description and amount edits, preserving those edits", () => {
+    const original = buildStatementEntries<FinancialEntry>(doc, []);
+    Object.assign(original[0], {
+      description: "Minha descrição revisada",
+      amount: 91.25,
+      category: "Outros",
+      status: "paid",
+      referenceDate: "2028-06-02",
+    });
+    const refreshed = buildStatementEntries(doc, original);
+    expect(refreshed).not.toBe(original);
+    expect(refreshed.find((entry) => entry.id === original[0].id)).toMatchObject({
+      description: "Minha descrição revisada",
+      amount: 91.25,
+      category: "Outros",
+      status: "paid",
+      referenceDate: "2028-06-02",
+    });
+  });
+  it("aborts safely when an unsigned legacy row was manually edited", () => {
+    const original = buildStatementEntries<FinancialEntry>(doc, []);
+    const legacy = original.map(({ sourceLineKey: _sourceLineKey, ...entry }) => entry);
+    legacy[0].description = "Descrição manual desconhecida";
+    legacy[0].amount = 99;
+    const next = buildStatementEntries(doc, legacy);
+    expect(next).toBe(legacy);
+    expect(next[0]).toMatchObject({ description: "Descrição manual desconhecida", amount: 99 });
   });
   it("retries image OCR when the text layer has no transactions", async () => {
     vi.mocked(readDocumentText).mockResolvedValueOnce({ text: "FATURA SEM TABELA", method: "text-layer", confidence: 100, pages: 1 });

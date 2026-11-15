@@ -41,3 +41,10 @@ Reduzir a densidade visual da Home sem remover funções e criar um fluxo local-
 - Manter Drive e Calendar atrás de OAuth e escopos explícitos; leituras podem ser preparadas, mas escritas exigem aprovação.
 - Adicionar capacidades de visão, tradução, comparação documental e geração de arquivos no Gemini sem expor chaves no frontend.
 - Não ativar WhatsApp, Instagram, Facebook, TikTok, X, Outlook, Waze ou reservas de viagem sem credenciais e autorização próprias.
+
+
+## Complemento — gestão financeira mês a mês (15/11/2026)
+
+A página `FinanceHub` continua usando a coleção local `irisFinances` no IndexedDB, sem serviço novo nem dependência de gráfico. Acrescentar navegação por mês/ano com filtro de receita/despesa/status/categoria, resumos do período, histórico completo e exportação mensal; não apagar registros ao trocar o período ou importar outro mês. Datas de compra conduzem lançamentos importados; data de vencimento conduz itens manuais quando disponível, com data de cadastro apenas como fallback explícito. Renderizar em SVG responsivo um comparativo de 12 meses de receitas, despesas e saldo, mostrando zeros somente para meses sem lançamentos reais. Preservar atualização/exclusão apenas por ação explícita do usuário, confirmar exclusões e avisar que os dados permanecem no dispositivo e podem ser copiados pelo backup/exportação local existentes.
+
+Datas mensais: a data de referência explicitamente escolhida pelo usuário prevalece. Datas de compra completas podem ser usadas diretamente; quando só houver dia/mês, o ano só é reconstruído a partir de vencimento completo e legível da fatura, com aviso de inferência e ajuste na virada do ano. Sem esse contexto, a compra aparece em “Sem data definida” para revisão, nunca no mês de upload por conveniência. Itens manuais legados usam vencimento ou data de cadastro com indicação de origem. Receitas/despesas/saldo do gráfico são movimentações registradas, não saldo bancário real nem total de fatura. Valores em aberto e pagos são identificados separadamente na gestão.

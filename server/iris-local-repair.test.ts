@@ -49,6 +49,18 @@ describe("local financial persistence and downloads", () => {
     await restoreLocalBackup(new File([JSON.stringify(backup)], "backup.json", { type: "application/json" }));
     expect(store.values.get("irisFinances")).toEqual(entries);
   });
+  it("preserves monthly history, explicit reference dates and income after a backup round trip", async () => {
+    const entries = [
+      { id: "jan-expense", type: "expense", description: "Hotel de teste", amount: 125.35, status: "paid", dueAt: "", createdAt: "2028-05-01", referenceDate: "2028-01-15", purchaseDate: "15 JAN", category: "Hotel" },
+      { id: "feb-income", type: "income", description: "Receita de teste", amount: 3500, status: "paid", dueAt: "2028-02-20", createdAt: "2028-05-01", referenceDate: "2028-02-20", category: "Outros" },
+    ];
+    const store = mockStore({ irisFinances: entries });
+    const backup = await buildLocalBackup();
+    expect(backup.irisFinances).toEqual(entries);
+    await restoreLocalBackup(new File([JSON.stringify(backup)], "historico-mensal.json", { type: "application/json" }));
+    expect(store.values.get("irisFinances")).toEqual(entries);
+    expect((store.values.get("irisFinances") as typeof entries).map((entry) => entry.referenceDate)).toEqual(["2028-01-15", "2028-02-20"]);
+  });
   it("preserves finances when restoring a valid version-1 backup without that field", async () => {
     const store = mockStore({ irisFinances: [{ id: "keep" }] });
     const legacyBackup = {

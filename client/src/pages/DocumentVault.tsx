@@ -198,24 +198,30 @@ export default function DocumentVault() {
   };
 
   const upsertFinanceEntries = async (document: DocumentRecord) => {
-    const safeDocument = sanitizeDocumentForStorage(document);
+    let safeDocument = sanitizeDocumentForStorage(document);
     const [latestDocuments, currentFinances] = await Promise.all([
       readLocal<DocumentRecord[]>("irisDocuments", items),
       readLocal<FinanceEntry[]>("irisFinances", []),
     ]);
+    const proposedFinances = safeDocument.kind === "financeiro" && safeDocument.money.length > 0
+      ? buildStatementEntries(safeDocument, currentFinances) : undefined;
+    const replacementBlocked = proposedFinances === currentFinances;
+    if (replacementBlocked) {
+      const previous = latestDocuments.find((item) => item.id === safeDocument.id);
+      safeDocument = sanitizeDocumentForStorage({ ...safeDocument, money: previous?.money ?? safeDocument.money, total: previous?.total ?? safeDocument.total, warnings: [...(safeDocument.warnings ?? []), "Releitura incompleta ou divergente. Nenhum lançamento anterior foi removido ou alterado. Confira o PDF e use Editar no Financeiro para ajustes individuais."] });
+    }
     const nextDocuments = [safeDocument, ...latestDocuments
       .filter((item) => item.id !== safeDocument.id)
       .map(sanitizeDocumentForStorage)];
-    if (safeDocument.kind === "financeiro" && safeDocument.money.length > 0) {
-      const nextFinances = sanitizeFinanceEntries(
-        buildStatementEntries(safeDocument, currentFinances),
-      );
+    if (proposedFinances) {
+      const nextFinances = sanitizeFinanceEntries(proposedFinances);
       await writeLocalBatch({ irisDocuments: nextDocuments, irisFinances: nextFinances });
     } else {
       // Empty/failed OCR never clears previously saved expense entries.
       await writeLocal("irisDocuments", nextDocuments);
     }
     setItems(nextDocuments);
+    return !replacementBlocked;
   };
 
   const ingest = async (files: FileList | null) => {
@@ -226,6 +232,7 @@ export default function DocumentVault() {
     let archived = 0;
     let duplicates = 0;
     let failures = 0;
+    let protectedFinanceHistory = 0;
     const rejectedForSize: string[] = [];
     const knownHashes = new Set(
       currentItems.map((item) => item.hash).filter((hash): hash is string => Boolean(hash)),
@@ -353,7 +360,9 @@ export default function DocumentVault() {
           processingError: undefined,
         };
         currentItems = [updated, ...currentItems.filter((item) => item.id !== updated.id)];
-        if (updated.kind === "financeiro") await upsertFinanceEntries(updated);
+        if (updated.kind === "financeiro") {
+          if (!await upsertFinanceEntries(updated)) protectedFinanceHistory += 1;
+        }
         else await persistDocument(updated);
       } catch (error) {
         failures += 1;
@@ -382,6 +391,7 @@ export default function DocumentVault() {
     const notices = [
       `${archived} arquivo(s) arquivado(s) localmente`,
       duplicates ? `${duplicates} duplicado(s) ignorado(s)` : "",
+      protectedFinanceHistory ? `${protectedFinanceHistory} releitura(s) incompleta(s); os lançamentos financeiros anteriores foram preservados sem alterações` : "",
       rejectedForSize.length
         ? `${rejectedForSize.length} arquivo(s) acima de 50 MB recusado(s) antes de leitura e arquivamento: ${rejectedForSize.slice(0, 3).join(", ")}${rejectedForSize.length > 3 ? "…" : ""}`
         : "",
@@ -505,10 +515,10 @@ export default function DocumentVault() {
         processing: false,
         processingError: undefined,
       };
-      if (updated.kind === "financeiro") await upsertFinanceEntries(updated);
-      else await persistDocument(updated);
+      const replacementAccepted = updated.kind === "financeiro" ? await upsertFinanceEntries(updated) : true;
+      if (updated.kind !== "financeiro") await persistDocument(updated);
       setMessage(
-        reliable
+        !replacementAccepted ? "Releitura incompleta ou divergente. O histórico financeiro anterior foi preservado integralmente; confira o PDF e edite os registros individualmente se necessário." : reliable
           ? `Leitura local concluída · confiança ${Math.round(reading.confidence)}%.${reading.warning ? ` ${safeStoredText(reading.warning, 500)}` : ""}`
           : `Documento continua pendente: leitura insuficiente (confiança ${Math.round(reading.confidence)}%).${reading.warning ? ` ${safeStoredText(reading.warning, 500)}` : ""}`,
       );
