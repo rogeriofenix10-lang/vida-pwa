@@ -221,7 +221,7 @@ export default function FinanceHub() {
     : "Nenhum lançamento corresponde aos filtros escolhidos. Ajuste ou limpe os filtros para ver outros registros.";
 
   return <main className="finance-page"><div className="finance-shell">
-    <Link href="/" className="finance-back"><ArrowLeft size={18} /> Voltar ao Radar</Link>
+    <Link href="/" className="finance-back"><ArrowLeft size={18} /> Voltar ao início</Link>
     <header className="finance-hero"><div><div className="finance-eyebrow">IRIS FINANÇAS · LOCAL-FIRST</div><h1>Seu dinheiro, mês a mês</h1><p>Receitas e despesas com histórico, filtros e visão anual — sem misturar o total de uma fatura com as compras que ela detalha.</p></div><span className="finance-safe"><WalletCards size={16} /> Somente neste dispositivo</span></header>
 
     <section className="finance-period-card" aria-label="Escolher período financeiro">

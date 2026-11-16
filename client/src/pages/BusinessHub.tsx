@@ -88,7 +88,7 @@ export default function BusinessHub() {
 
   const filtered = useMemo(() => items.filter((item) => `${item.name} ${item.company} ${item.kind} ${item.notes}`.toLowerCase().includes(query.toLowerCase())), [items, query]);
   return <main className="profile-page"><div className="profile-card">
-    <Link href="/" className="back-link"><ArrowLeft size={16} /> Voltar ao Radar</Link>
+    <Link href="/" className="back-link"><ArrowLeft size={16} /> Voltar ao início</Link>
     <div className="profile-heading"><div className="profile-icon"><BriefcaseBusiness size={22} /></div><div><div className="eyebrow">IRIS COMERCIAL · D1 + R2 + LOCAL</div><h1>Administração comercial</h1><p>Clientes, pedidos, comissões, metas e inadimplência com cópia local, anexos físicos e sincronização persistente.</p></div></div>
     <div className="notification-settings"><strong>Governança comercial</strong><p>Alterações externas e exclusões exigem confirmação explícita. Anexos são enviados ao R2 somente quando você salva o registro.</p></div>
     <div className="memory-settings"><strong>Novo registro</strong><div style={{ display: "grid", gap: 8, gridTemplateColumns: "repeat(auto-fit,minmax(160px,1fr))", marginTop: 10 }}>

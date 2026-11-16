@@ -52,3 +52,10 @@
 - [x] Oferecer gerenciamento de receitas e gastos — cadastrar, editar, categorizar, marcar situação e excluir com confirmação — com filtros úteis no livro mensal.
 - [x] Mostrar gráfico responsivo, por mês, comparando receitas, despesas e saldo, com valores calculados apenas dos lançamentos reais e sem preencher meses sem dados como se houvesse movimento.
 - [x] Manter a experiência intuitiva, funcional, moderna e adequada ao celular, indicando que o arquivo local reside neste dispositivo.
+
+# Navegação sem duplicidades e Arquivo de Documentos (15/11/2026)
+- [x] **Agenda em Demonstração:** informar que a Agenda do Google requer acesso remoto/consentimento e está bloqueada de propósito no modo local; esclarecer que nenhum dado foi enviado e oferecer Configurações, sem desbloquear ou conectar automaticamente.
+- [x] **Uma entrada por módulo:** manter Finanças no botão próprio; colocar Documentos e contratos como botão do Menu; remover os atalhos duplicados Arquivos/Análises e os cartões repetidos de Finanças, Documentos e Radar. Preservar tarefas úteis sob “Tarefas” no Menu, sem apagar os itens existentes.
+- [x] **Documentos e contratos sem gestão financeira duplicada:** manter armazenamento local, busca, revisão, OCR/leitura para documentos não financeiros e download dos originais; adicionar filtro de contratos; retirar a aba Gastos e o resumo financeiro. Somente FinanceHub importa faturas e cria/gerencia lançamentos. Faturas antigas continuam arquivadas, sem exclusão ou alteração automática, e podem ser encaminhadas a Finanças.
+- [x] **Auditoria de navegação:** conferir que nenhum menu/componente ativo volta a exibir o mesmo ícone ou função em vários lugares, preservando rotas antigas que possam estar salvas nos favoritos.
+- [x] **Duplicidades secundárias:** deixar `/offline` como Notas; preservar tarefas antigas dessa coleção em consulta, sem migrar/apagar IDs ou manter um segundo CRUD de tarefas. Calendar tem consulta, criação, edição e exclusão na Agenda; `/google` fica apenas com Drive, mantendo OAuth/consentimento e confirmação de escritas.

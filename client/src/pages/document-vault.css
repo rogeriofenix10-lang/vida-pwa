@@ -22,6 +22,7 @@
 .document-tabs span { color: #bfe8ff; font-weight: 800; }
 .document-message { width: min(1180px, 100%); margin: 0 auto 14px; padding: 12px 14px; border: 1px solid rgba(56,189,248,.24); border-radius: 12px; color: #bae6fd; background: rgba(14,116,144,.15); font-size: 13px; }
 .document-layout { width: min(1180px, 100%); margin: 0 auto; display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(260px, .7fr); gap: 16px; }
+.document-layout.document-library-layout { grid-template-columns: minmax(0, 1fr); }
 .document-list, .document-insights { min-width: 0; }
 .document-list { padding: 16px; border: 1px solid rgba(93, 173, 226, .2); border-radius: 18px; background: rgba(10, 23, 41, .8); }
 .document-list-head { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 12px; }
@@ -34,10 +35,32 @@
 .document-row-main { flex: 1; min-width: 0; display: grid; gap: 4px; }
 .document-row-main > strong { overflow: hidden; color: #f1f6ff; font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
 .document-row-main small { color: #94a9c0; font-size: 11px; line-height: 1.45; }
-.document-ok { color: #86efac !important; }.document-warn { color: #fcd34d !important; }
+.document-ok { color: #86efac !important; }
+.document-warn { color: #fcd34d !important; }
+.document-finance-note { color: #a9c6df !important; }
+.document-finance-note a { color: #7dd3fc; font-weight: 700; text-decoration: underline; text-underline-offset: 2px; }
+.document-finance-note a:hover { color: #bae6fd; }
 .document-confirm { margin-top: .35rem; display: inline-flex; align-items: center; justify-content: center; gap: 5px; width: fit-content; border: 1px solid rgba(134,239,172,.35); border-radius: .55rem; padding: .35rem .55rem; background: rgba(34,197,94,.12); color: #bbf7d0; font-size: .72rem; font-weight: 700; cursor: pointer; }
-.document-confirm:hover { background: rgba(34,197,94,.22); }.document-confirm:disabled { opacity: .55; cursor: wait; }
-.document-confidence { display: inline-flex; align-items: center; gap: .35rem; }.document-confidence-meter { width: 76px; height: 4px; overflow: hidden; border-radius: 999px; background: rgba(148,163,184,.18); }.document-confidence-meter i { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg,#f59e0b,#86efac); }
-.document-empty { display: grid; place-items: center; gap: 8px; min-height: 220px; color: #7890aa; text-align: center; }.document-empty p { margin: 0; font-size: 13px; }
-.document-insights { display: grid; align-content: start; gap: 12px; }.insight-card { padding: 17px; border: 1px solid rgba(93,173,226,.2); border-radius: 16px; background: rgba(14,29,51,.86); }.insight-card > b { display: block; margin: 10px 0; color: #f4f8ff; font-size: 24px; }.insight-card > small { display: block; margin-top: 7px; color: #94a9c0; font-size: 11px; line-height: 1.5; }.insight-line { display: flex; justify-content: space-between; gap: 8px; padding: 8px 0; border-top: 1px solid rgba(148,163,184,.12); color: #bcd0e5; font-size: 12px; }.insight-line span:last-child { color: #e8f1ff; font-weight: 700; }.document-export { float: right; display: inline-flex; align-items: center; gap: .25rem; border: 1px solid rgba(125,211,252,.25); border-radius: .45rem; padding: .25rem .45rem; background: transparent; color: #bae6fd; font-size: .7rem; cursor: pointer; }.document-export:disabled { opacity: .45; cursor: not-allowed; }.document-month-filter { border: 1px solid rgba(148,163,184,.18); border-radius: .5rem; padding: .35rem .45rem; background: rgba(15,35,58,.7); color: #cbd5e1; font-size: .72rem; }.document-period-label { display: block; margin-top: .35rem; color: #94a3b8; font-size: .72rem; }.document-footnote { width: min(1180px, 100%); margin: 14px auto 0; }.document-disclaimer { display: flex; gap: .45rem; align-items: flex-start; padding: .75rem; border-radius: .65rem; background: rgba(245,158,11,.08); color: #fcd34d; font-size: .72rem; line-height: 1.45; }
-@media (max-width: 800px) { .document-vault { padding: 20px 12px 36px; }.document-vault-head { grid-template-columns: 1fr; }.document-trust { width: fit-content; }.document-upload { align-items: flex-start; flex-direction: column; }.document-layout { grid-template-columns: 1fr; }.document-confidence-meter { width: 58px; } }
+.document-confirm:hover { background: rgba(34,197,94,.22); }
+.document-confirm:disabled { opacity: .55; cursor: wait; }
+.document-confidence { display: inline-flex; align-items: center; gap: .35rem; }
+.document-confidence-meter { width: 76px; height: 4px; overflow: hidden; border-radius: 999px; background: rgba(148,163,184,.18); }
+.document-confidence-meter i { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg,#f59e0b,#86efac); }
+.document-empty { display: grid; place-items: center; gap: 8px; min-height: 220px; color: #7890aa; text-align: center; }
+.document-empty p { margin: 0; font-size: 13px; }
+.document-insights { display: grid; align-content: start; gap: 12px; }
+.insight-card { padding: 17px; border: 1px solid rgba(93,173,226,.2); border-radius: 16px; background: rgba(14,29,51,.86); }
+.insight-card > small { display: block; margin-top: 7px; color: #94a9c0; font-size: 11px; line-height: 1.5; }
+.insight-line { display: flex; justify-content: space-between; gap: 8px; padding: 8px 0; border-top: 1px solid rgba(148,163,184,.12); color: #bcd0e5; font-size: 12px; }
+.insight-line span:last-child { color: #e8f1ff; font-weight: 700; }
+.document-month-filter { border: 1px solid rgba(148,163,184,.18); border-radius: .5rem; padding: .35rem .45rem; background: rgba(15,35,58,.7); color: #cbd5e1; font-size: .72rem; }
+.document-footnote { width: min(1180px, 100%); margin: 14px auto 0; }
+.document-disclaimer { display: flex; gap: .45rem; align-items: flex-start; padding: .75rem; border-radius: .65rem; background: rgba(245,158,11,.08); color: #fcd34d; font-size: .72rem; line-height: 1.45; }
+@media (max-width: 800px) {
+  .document-vault { padding: 20px 12px 36px; }
+  .document-vault-head { grid-template-columns: 1fr; }
+  .document-trust { width: fit-content; }
+  .document-upload { align-items: flex-start; flex-direction: column; }
+  .document-layout { grid-template-columns: 1fr; }
+  .document-confidence-meter { width: 58px; }
+}

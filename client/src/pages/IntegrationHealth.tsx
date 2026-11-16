@@ -11,7 +11,7 @@ export default function IntegrationHealth() {
   const data = health.data;
   const ok = data?.status === "ok";
   return <main className="profile-page"><div className="profile-card">
-    <div style={{display:"flex",gap:12,alignItems:"center",flexWrap:"wrap"}}><Link href="/" className="back-link">← Voltar ao Radar</Link><a href="/laboratorio" className="back-link">Laboratório local →</a></div>
+    <div style={{display:"flex",gap:12,alignItems:"center",flexWrap:"wrap"}}><Link href="/" className="back-link">← Voltar ao início</Link><a href="/laboratorio" className="back-link">Laboratório local →</a></div>
     <div className="profile-heading"><div className="profile-icon"><Activity size={22}/></div><div><div className="eyebrow">IRIS 5.0.8</div><h1>Saúde operacional</h1><p>Monitoramento de conectores, fila, eventos e auditoria.</p></div></div>
     <div className="notification-settings"><strong>{ok ? <CheckCircle2 size={17}/> : <AlertTriangle size={17}/>} Estado: {ok ? "operacional" : "indisponível"}</strong><p>Atualização automática a cada 10 segundos.</p><Button variant="outline" onClick={() => void health.refetch()} disabled={health.isFetching}><RefreshCw size={16} className={health.isFetching ? "animate-spin" : ""}/> Atualizar</Button></div>
     <div className="memory-settings"><strong><Server size={17}/> Conectores</strong>{(data?.connectors ?? []).map((c:any)=><div className="memory-row" key={c.provider}><span><b>{c.provider}</b><br/><small>{c.runtime?.circuit === "open" ? "Circuit breaker aberto" : "Circuito fechado"} · falhas: {c.runtime?.failures ?? 0}</small></span><span>{c.runtime?.circuit === "open" ? "⚠️" : "✓"}</span></div>)}</div>

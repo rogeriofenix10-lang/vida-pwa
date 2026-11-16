@@ -262,7 +262,7 @@ export default function Diagnostics() {
   return (
     <main className="profile-page">
       <div className="profile-card">
-        <Link href="/" className="back-link"><ArrowLeft size={16} /> Voltar ao Radar</Link>
+        <Link href="/" className="back-link"><ArrowLeft size={16} /> Voltar ao início</Link>
         <div className="profile-heading">
           <div className="profile-icon"><Activity size={22} /></div>
           <div>

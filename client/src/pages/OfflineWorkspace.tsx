@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
-import { ArrowLeft, Check, ClipboardList, Trash2 } from "lucide-react";
+import { ArrowLeft, ClipboardList, Trash2 } from "lucide-react";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
-import { loadIrisData, saveIrisData } from "@/lib/irisWorker";
+import { isIrisAccessUnlocked, isIrisRemoteModeEnabled, loadIrisData, saveIrisData } from "@/lib/irisWorker";
 import { readLocal, writeLocal } from "@/lib/irisLocalStore";
 
 type Entry = { id: string; text: string; done: boolean; createdAt: string; kind: "task" | "note"; dueAt?: string };
@@ -10,55 +10,107 @@ type Entry = { id: string; text: string; done: boolean; createdAt: string; kind:
 export default function OfflineWorkspace() {
   const [entries, setEntries] = useState<Entry[]>([]);
   const [text, setText] = useState("");
-  const [kind, setKind] = useState<"task" | "note">("task");
   const [message, setMessage] = useState("");
 
   useEffect(() => {
-    void readLocal<Entry[]>("offlineWorkspace", []).then((local) => {
-      setEntries(local);
-      void loadIrisData("tasks").then(({ items }) => {
-        const remote = items.map((row) => ({
-          id: String(row.id),
-          text: String(row.title ?? ""),
-          done: String(row.status ?? "pending") === "completed",
-          createdAt: String(row.created_at ?? new Date().toISOString()),
-          kind: ((row.payload as { kind?: string } | undefined)?.kind === "note" ? "note" : "task") as Entry["kind"],
-          dueAt: row.due_at ? String(row.due_at) : undefined,
-        }));
-        if (remote.length) setEntries(remote);
-      }).catch(() => undefined);
+    let active = true;
+    void readLocal<Entry[]>("offlineWorkspace", []).then(async (local) => {
+      if (active) setEntries(local);
+      if (!isIrisRemoteModeEnabled() || !isIrisAccessUnlocked()) return;
+      try {
+        const { items } = await loadIrisData("tasks");
+        const merged = new Map(local.map((entry) => [entry.id, entry]));
+        for (const row of items) {
+          const id = String(row.id);
+          if (!merged.has(id)) merged.set(id, {
+            id,
+            text: String(row.title ?? ""),
+            done: String(row.status ?? "pending") === "completed",
+            createdAt: String(row.created_at ?? new Date().toISOString()),
+            kind: (row.payload as { kind?: string } | undefined)?.kind === "note" ? "note" : "task",
+            dueAt: row.due_at ? String(row.due_at) : undefined,
+          });
+        }
+        if (active) setEntries([...merged.values()]);
+      } catch {
+        // Local notes and legacy task records remain available without a connection.
+      }
+    }).catch(() => {
+      if (active) setMessage("Não foi possível abrir as notas locais. Nenhum dado foi alterado.");
     });
+    return () => { active = false; };
   }, []);
 
-  const save = async (next: Entry[]) => {
-    setEntries(next);
+  const saveNote = async (next: Entry[], changed?: Entry) => {
     await writeLocal("offlineWorkspace", next);
-    await Promise.all(next.map((entry) => saveIrisData("tasks", {
-      id: entry.id,
-      title: entry.text,
-      detail: "",
-      status: entry.done ? "completed" : "pending",
-      priority: "normal",
-      category: entry.kind === "note" ? "Notas" : "Tarefas",
-      due_at: entry.dueAt ?? null,
-      payload: { kind: entry.kind, createdAt: entry.createdAt },
-    }).catch(() => undefined)));
+    setEntries(next);
+    if (!changed || !isIrisRemoteModeEnabled() || !isIrisAccessUnlocked()) return false;
+    try {
+      await saveIrisData("tasks", {
+        id: changed.id,
+        title: changed.text,
+        detail: "",
+        status: changed.done ? "completed" : "pending",
+        priority: "normal",
+        category: "Notas",
+        due_at: changed.dueAt ?? null,
+        payload: { kind: "note", createdAt: changed.createdAt },
+      });
+      return true;
+    } catch { return false; }
   };
 
   const add = async () => {
     if (!text.trim()) return;
-    const entry: Entry = { id: crypto.randomUUID(), text: text.trim(), done: false, createdAt: new Date().toISOString(), kind };
-    await save([entry, ...entries]);
-    setText("");
-    setMessage("Salvo neste dispositivo e sincronizado no D1 quando disponível.");
+    const entry: Entry = { id: crypto.randomUUID(), text: text.trim(), done: false, createdAt: new Date().toISOString(), kind: "note" };
+    try {
+      const synced = await saveNote([entry, ...entries], entry);
+      setText("");
+      setMessage(synced ? "Nota salva neste dispositivo e sincronizada." : "Nota salva neste dispositivo. Sincronização remota não realizada.");
+    } catch {
+      setMessage("Não foi possível salvar a nota. Os registros anteriores foram preservados.");
+    }
   };
 
-  return <main className="profile-page"><div className="profile-card">
-    <Link href="/" className="back-link"><ArrowLeft size={16}/> Voltar ao Radar</Link>
-    <div className="profile-heading"><div className="profile-icon"><ClipboardList size={22}/></div><div><div className="eyebrow">IRIS LOCAL-FIRST</div><h1>Espaço de tarefas</h1><p>O fallback local permanece ativo; quando disponível, tarefas e notas são sincronizadas no D1.</p></div></div>
-    <div className="notification-settings"><strong>Sincronização protegida</strong><p>Nenhuma ação externa é executada sem autorização. Exclusões continuam locais nesta fase.</p></div>
-    <div className="memory-settings"><strong>Nova tarefa ou nota</strong><div style={{display:"flex",gap:8,marginTop:10,flexWrap:"wrap"}}><select value={kind} onChange={(e)=>setKind(e.target.value as typeof kind)}><option value="task">Tarefa</option><option value="note">Nota</option></select><input value={text} onChange={(e)=>setText(e.target.value)} onKeyDown={(e)=>{if(e.key === "Enter") void add();}} placeholder="Escreva aqui..." style={{flex:1,minWidth:180}}/><Button onClick={()=>void add()}>Adicionar</Button></div></div>
-    {message && <div className="profile-message">{message}</div>}
-    <div className="memory-settings"><strong>Itens ({entries.length})</strong>{entries.length===0?<small>Nenhum item salvo.</small>:entries.map((entry)=><div className="memory-row" key={entry.id}><span style={{textDecoration:entry.done?"line-through":undefined}}>{entry.text}<br/><small>{entry.kind === "note" ? "Nota" : "Tarefa"} · {new Date(entry.createdAt).toLocaleString()}</small></span><span style={{display:"flex",gap:6}}><Button size="sm" variant="outline" onClick={()=>void save(entries.map((x)=>x.id===entry.id?{...x,done:!x.done}:x))}><Check size={15}/></Button><Button size="sm" variant="ghost" onClick={()=>void save(entries.filter((x)=>x.id!==entry.id))}><Trash2 size={15}/></Button></span></div>)}</div>
-  </div></main>;
+  const removeNote = async (id: string) => {
+    if (!window.confirm("Excluir esta nota somente deste dispositivo? A cópia remota, se existir, não será excluída.")) return;
+    try {
+      await saveNote(entries.filter((entry) => entry.id !== id || entry.kind !== "note"));
+      setMessage("Nota removida deste dispositivo. Uma cópia remota existente permanece preservada.");
+    } catch { setMessage("Não foi possível excluir a nota. Nenhum registro anterior foi substituído."); }
+  };
+
+  const notes = entries.filter((entry) => entry.kind === "note");
+  const legacyTasks = entries.filter((entry) => entry.kind === "task");
+  return (
+    <main className="profile-page"><div className="profile-card">
+      <Link href="/" className="back-link"><ArrowLeft size={16} /> Voltar ao início</Link>
+      <div className="profile-heading">
+        <div className="profile-icon"><ClipboardList size={22} /></div>
+        <div><div className="eyebrow">IRIS LOCAL-FIRST</div><h1>Notas</h1><p>Anotações neste dispositivo. A gestão de tarefas fica em Menu → Tarefas.</p></div>
+      </div>
+      <div className="memory-settings">
+        <strong>Nova nota</strong>
+        <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
+          <input value={text} onChange={(event) => setText(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") void add(); }} placeholder="Escreva uma nota…" style={{ flex: 1, minWidth: 180 }} />
+          <Button onClick={() => void add()}>Salvar nota</Button>
+        </div>
+      </div>
+      {message && <div className="profile-message" role="status">{message}</div>}
+      <div className="memory-settings">
+        <strong>Notas ({notes.length})</strong>
+        {notes.length === 0 ? <small>Nenhuma nota salva.</small> : notes.map((entry) => (
+          <div className="memory-row" key={entry.id}>
+            <span>{entry.text}<br /><small>{new Date(entry.createdAt).toLocaleString("pt-BR")}</small></span>
+            <Button size="sm" variant="ghost" aria-label="Excluir nota local" onClick={() => void removeNote(entry.id)}><Trash2 size={15} /></Button>
+          </div>
+        ))}
+      </div>
+      {legacyTasks.length > 0 && <details className="memory-settings">
+        <summary>Tarefas antigas deste espaço ({legacyTasks.length}) · consulta</summary>
+        <p>Esses registros foram preservados com seus identificadores originais. Novas tarefas e seu gerenciamento ficam em <Link href="/?view=tarefas">Menu → Tarefas</Link>; os registros antigos não foram migrados nem excluídos.</p>
+        {legacyTasks.map((entry) => <div className="memory-row" key={entry.id}><span>{entry.text}<br /><small>{entry.done ? "Concluída" : "Pendente"} · {new Date(entry.createdAt).toLocaleString("pt-BR")}</small></span></div>)}
+      </details>}
+    </div></main>
+  );
 }

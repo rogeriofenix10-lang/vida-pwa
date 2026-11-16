@@ -93,7 +93,7 @@ export default function Connections() {
   };
 
   return <main className="profile-page"><div className="profile-card">
-    <Link href="/" className="back-link"><ArrowLeft size={16} /> Voltar ao Radar</Link>
+    <Link href="/" className="back-link"><ArrowLeft size={16} /> Voltar ao início</Link>
     <div className="profile-heading"><div className="profile-icon"><LockKeyhole size={22} /></div><div><div className="eyebrow">IRIS 5.5.1 · PWA LOCAL</div><h1>Conexões e permissões</h1><p>Conecte contas somente depois de revisar as regras de acesso.</p></div></div>
     <div className="notification-settings"><strong><ShieldCheck size={17}/> Regra de segurança ativa</strong><p>A IRIS pode analisar e sugerir somente quando você pedir. Alterar, excluir, enviar, compartilhar ou organizar exige aprovação explícita.</p><div className="memory-row"><span>Acesso ao Worker</span><b role="status">{remoteAccessUnlocked ? "Unlocked · desbloqueado" : "Locked · bloqueado"}</b></div><div className="memory-row"><span>Analisar</span><b>Permitido após conexão</b></div><div className="memory-row"><span>Modificar / enviar / excluir / compartilhar / organizar</span><b>Bloqueado sem aprovação</b></div></div>
     <h2>Google</h2>

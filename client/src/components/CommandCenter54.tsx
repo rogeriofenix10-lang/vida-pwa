@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Link, useLocation } from "wouter";
+import { Link, useLocation, useSearch } from "wouter";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { startLogin } from "@/const";
 import { trpc } from "@/lib/trpc";
@@ -27,17 +27,18 @@ import {
   gmailStatus,
   isIrisAccessUnlocked,
   isIrisRemoteModeEnabled,
+  googleCalendarCreate,
   googleCalendarDelete,
   googleCalendarEvents,
   googleCalendarStatus,
   googleCalendarUpdate,
   loadIrisData,
   saveIrisData,
+  restoreIrisAccess,
   startGoogleOAuth,
   type GmailSummary,
   type GoogleCalendarEvent,
 } from "@/lib/irisWorker";
-import { downloadBlob, readLocal } from "@/lib/irisLocalStore";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -45,8 +46,6 @@ import {
   Bell,
   Check,
   ChevronRight,
-  Download,
-  FileText,
   Calendar,
   Layers,
   Loader2,
@@ -54,24 +53,11 @@ import {
   Pencil,
   Plus,
   Search,
-  ShieldCheck,
   Sparkles,
-  SlidersHorizontal,
-  Sun,
-  Moon,
-  Radio,
-  Hourglass,
-  Activity,
-  Languages,
   X,
-  UserRound,
   ExternalLink,
   RefreshCw,
   MessageCircle,
-  BarChart3,
-  Wrench,
-  CheckCircle2,
-  HeartPulse,
   Menu,
   WalletCards,
 } from "lucide-react";
@@ -95,11 +81,31 @@ export type ActiveModalView =
   | "assistente"
   | "radar"
   | "agenda"
-  | "arquivos"
-  | "analises"
-  | "ferramentas"
   | "nova-tarefa"
   | "saude";
+
+type HomeMenuItem =
+  | { label: string; href: string }
+  | { label: string; view: Exclude<ActiveModalView, null> };
+
+const homeMenuItems: HomeMenuItem[] = [
+  { label: "Tarefas", view: "radar" },
+  { label: "Documentos e contratos", href: "/documentos" },
+  { label: "Catálogo", href: "/catalogo" },
+  { label: "Comercial", href: "/comercial" },
+  { label: "Notas", href: "/offline" },
+  { label: "Google Drive", href: "/google" },
+  { label: "Mídia", href: "/midia" },
+  { label: "Segurança", href: "/seguranca" },
+  { label: "Diagnóstico", href: "/diagnostico" },
+  { label: "Configurações", href: "/configuracoes" },
+  { label: "Intérprete", href: "/interprete" },
+  { label: "Conexões", href: "/conexoes" },
+  { label: "Perfil e preferências", href: "/perfil" },
+  { label: "Saúde da operação", href: "/operacao" },
+  { label: "Laboratório local", href: "/laboratorio" },
+  { label: "Saúde", view: "saude" },
+];
 
 export type RadarItem = {
   id: number;
@@ -148,58 +154,7 @@ type CalendarEditDraft = {
   start: string;
   end: string;
 };
-type AnalysisFinanceRow = {
-  id: string;
-  type: "income" | "expense";
-  description: string;
-  amount: number;
-  status: "open" | "paid" | "overdue";
-  dueAt: string;
-  category: string;
-};
-type AnalysisDocumentRow = { id: string; name: string };
-
-const recordValue = (value: unknown): Record<string, unknown> | null =>
-  value && typeof value === "object" && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : null;
-
-function normalizeFinanceRow(value: unknown, index: number): AnalysisFinanceRow | null {
-  const row = recordValue(value);
-  if (!row) return null;
-  const rawAmount = row.amount ?? (row.amount_cents != null
-    ? Number(row.amount_cents) / 100
-    : Number.NaN);
-  const amount = Number(rawAmount);
-  if (!Number.isFinite(amount)) return null;
-  const status = String(row.status ?? "open");
-  return {
-    id: String(row.id ?? `sem-id-${index}`),
-    type: String(row.type) === "income" ? "income" : "expense",
-    description: String(row.description ?? "Lançamento sem descrição"),
-    amount: Math.abs(amount),
-    status: status === "paid" || status === "overdue" ? status : "open",
-    dueAt: String(row.dueAt ?? row.due_at ?? ""),
-    category: String(row.category ?? "Outros").trim() || "Outros",
-  };
-}
-
-function normalizeDocumentRow(value: unknown, index: number): AnalysisDocumentRow | null {
-  const row = recordValue(value);
-  if (!row) return null;
-  return {
-    id: String(row.id ?? `sem-id-${index}`),
-    name: String(row.name ?? row.originalName ?? "Documento sem nome"),
-  };
-}
-
-function mergeById<T extends { id: string }>(primary: T[], secondary: T[]): T[] {
-  const rows = new Map<string, T>();
-  for (const row of primary) rows.set(row.id, row);
-  for (const row of secondary) if (!rows.has(row.id)) rows.set(row.id, row);
-  return [...rows.values()];
-}
-
+type CalendarCreateDraft = { summary: string; start: string; end: string };
 function normalizeGmailText(value: string): string {
   return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
 }
@@ -335,10 +290,6 @@ function calendarDateForDisplay(date?: GoogleCalendarDate): string {
   }
 }
 
-function formatBrl(value: number): string {
-  return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-}
-
 const initialItems: RadarItem[] = [
   {
     id: 1,
@@ -398,7 +349,7 @@ const onboardingSteps = [
   },
   {
     title: "O que você quer organizar?",
-    body: "Escolha seu foco inicial para o Radar pessoal.",
+    body: "Escolha seu foco inicial para Tarefas e lembretes.",
     icon: Layers,
   },
   {
@@ -410,6 +361,7 @@ const onboardingSteps = [
 
 export default function CommandCenter54() {
   const [, navigate] = useLocation();
+  const search = useSearch();
   const { isAuthenticated } = useAuth();
   const [remoteAccessReady, setRemoteAccessReady] = useState(
     () => isIrisRemoteModeEnabled() && isIrisAccessUnlocked(),
@@ -462,38 +414,85 @@ export default function CommandCenter54() {
   const [editText, setEditText] = useState("");
   const [newTaskInput, setNewTaskInput] = useState("");
   const [calendarEvents, setCalendarEvents] = useState<GoogleCalendarEvent[]>([]);
+  const [calendarAuthorized, setCalendarAuthorized] = useState(false);
   const [calendarMessage, setCalendarMessage] = useState("Carregando agenda autorizada…");
   const [calendarError, setCalendarError] = useState("");
   const [calendarLoading, setCalendarLoading] = useState(false);
   const [calendarActionBusyId, setCalendarActionBusyId] = useState<string | null>(null);
   const [editingCalendarEventId, setEditingCalendarEventId] = useState<string | null>(null);
   const [calendarDraft, setCalendarDraft] = useState<CalendarEditDraft | null>(null);
-  const [analysisRows, setAnalysisRows] = useState<{
-    finances: AnalysisFinanceRow[] | null;
-    documents: AnalysisDocumentRow[] | null;
-  }>({ finances: null, documents: null });
-  const [analysisLoading, setAnalysisLoading] = useState(false);
-  const [analysisError, setAnalysisError] = useState("");
-  const [analysisSources, setAnalysisSources] = useState({
-    finances: "Aguardando atualização",
-    documents: "Aguardando atualização",
-  });
-  const [analysisReport, setAnalysisReport] = useState<string | null>(null);
-  const analysisLocalErrorsRef = useRef<string[]>([]);
+  const [calendarCreateDraft, setCalendarCreateDraft] = useState<CalendarCreateDraft>({ summary: "", start: "", end: "" });
+  const [calendarCreateBusy, setCalendarCreateBusy] = useState(false);
+  const [calendarAccessHelp, setCalendarAccessHelp] = useState<"settings" | "connections" | null>(null);
   const radarRetryAfterUnlockRef = useRef(false);
   const calendarRetryAfterUnlockRef = useRef(false);
-  const analysisRetryAfterUnlockRef = useRef({ finances: false, documents: false });
   const lastVoiceCommandRef = useRef({ text: "", at: 0 });
   const lastVoiceErrorRef = useRef({ text: "", at: 0 });
   const chatFeedRef = useRef<HTMLDivElement | null>(null);
   const chatPinnedToBottomRef = useRef(true);
   const { theme, toggleTheme } = useTheme();
+  const canManageCalendar = remoteAccessReady && calendarAuthorized && isIrisRemoteModeEnabled() && isIrisAccessUnlocked();
+
+  useEffect(() => {
+    const requestedView = new URLSearchParams(search).get("view");
+    if (requestedView === "agenda") setActiveView("agenda");
+    else if (requestedView === "tarefas") setActiveView("radar");
+  }, [search]);
+
+  const openHomeMenuItem = (item: HomeMenuItem) => {
+    setMenuOpen(false);
+    if ("view" in item) {
+      setActiveView(item.view);
+      return;
+    }
+    navigate(item.href);
+  };
 
   const refreshCalendar = async () => {
     setCalendarLoading(true);
     setCalendarError("");
-    setCalendarMessage("Carregando agenda autorizada…");
     try {
+      if (!isIrisRemoteModeEnabled()) {
+        calendarRetryAfterUnlockRef.current = true;
+        setCalendarAuthorized(false);
+        setCalendarEvents([]);
+        setCalendarAccessHelp("settings");
+        setCalendarMessage(
+          "A Agenda do Google está bloqueada intencionalmente no modo Demonstração. Nenhum dado foi enviado. Ative o acesso remoto em Configurações somente se quiser usar esse recurso.",
+        );
+        return false;
+      }
+
+      if (!isIrisAccessUnlocked()) {
+        const restored = await restoreIrisAccess();
+        if (!restored.restored || !isIrisAccessUnlocked()) {
+          calendarRetryAfterUnlockRef.current = true;
+          setCalendarAuthorized(false);
+          setCalendarEvents([]);
+          setCalendarAccessHelp("settings");
+          setCalendarMessage(
+            "A Agenda exige uma sessão remota desbloqueada. Nenhuma consulta de compromissos foi enviada; desbloqueie o acesso remoto em Configurações para continuar.",
+          );
+          return false;
+        }
+      }
+
+      setCalendarAccessHelp(null);
+      setCalendarMessage("Verificando autorização do Google Calendar…");
+      const status = await googleCalendarStatus();
+      if (!status.authorized) {
+        calendarRetryAfterUnlockRef.current = false;
+        setCalendarAuthorized(false);
+        setCalendarEvents([]);
+        setCalendarAccessHelp("connections");
+        setCalendarMessage(
+          "O Google Calendar ainda não está autorizado. Nenhum compromisso foi consultado; abra Conexões para autorizar quando desejar.",
+        );
+        return false;
+      }
+
+      setCalendarAuthorized(true);
+      setCalendarMessage("Consultando agenda autorizada…");
       const result = await googleCalendarEvents(new Date().toISOString());
       const events = result.items ?? [];
       calendarRetryAfterUnlockRef.current = false;
@@ -503,152 +502,74 @@ export default function CommandCenter54() {
         : "Nenhum compromisso futuro encontrado.");
       return true;
     } catch (error) {
-      calendarRetryAfterUnlockRef.current = true;
-      setCalendarMessage("Não foi possível carregar a agenda.");
+      calendarRetryAfterUnlockRef.current = false;
+      setCalendarAuthorized(false);
+      setCalendarAccessHelp(null);
+      setCalendarMessage("Falha de rede ao consultar o Google Calendar. Tente novamente.");
       setCalendarError(error instanceof Error
         ? error.message
-        : "Google Calendar não autorizado ou indisponível.");
+        : "A conexão com o Google Calendar falhou.");
       return false;
     } finally {
       setCalendarLoading(false);
     }
   };
 
-  const refreshAnalysisData = async () => {
-    setAnalysisLoading(true);
-    setAnalysisError("");
-    const [localFinancesResult, remoteFinancesResult, localDocumentsResult, remoteDocumentsResult] =
-      await Promise.allSettled([
-        "indexedDB" in window
-          ? readLocal<unknown[]>("irisFinances", [])
-          : Promise.reject(new Error("IndexedDB não disponível")),
-        loadIrisData("finances"),
-        "indexedDB" in window
-          ? readLocal<unknown[]>("irisDocuments", [])
-          : Promise.reject(new Error("IndexedDB não disponível")),
-        loadIrisData("documents"),
-      ]);
-    analysisRetryAfterUnlockRef.current = {
-      finances: remoteFinancesResult.status === "rejected",
-      documents: remoteDocumentsResult.status === "rejected",
-    };
-
-    const localFinances = localFinancesResult.status === "fulfilled"
-      ? localFinancesResult.value.map(normalizeFinanceRow).filter((row): row is AnalysisFinanceRow => row !== null)
-      : null;
-    const remoteFinances = remoteFinancesResult.status === "fulfilled"
-      ? remoteFinancesResult.value.items
-          .map((row, index) => {
-            const payload = recordValue(row.payload) ?? {};
-            return normalizeFinanceRow({ ...payload, ...row }, index);
-          })
-          .filter((row): row is AnalysisFinanceRow => row !== null)
-      : null;
-    const localDocuments = localDocumentsResult.status === "fulfilled"
-      ? localDocumentsResult.value.map(normalizeDocumentRow).filter((row): row is AnalysisDocumentRow => row !== null)
-      : null;
-    const remoteDocuments = remoteDocumentsResult.status === "fulfilled"
-      ? remoteDocumentsResult.value.items
-          .map((row, index) => {
-            const payload = recordValue(row.payload) ?? {};
-            return normalizeDocumentRow({ ...payload, ...row }, index);
-          })
-          .filter((row): row is AnalysisDocumentRow => row !== null)
-      : null;
-
-    setAnalysisRows({
-      finances: localFinances !== null || remoteFinances !== null
-        ? mergeById(localFinances ?? [], remoteFinances ?? [])
-        : null,
-      documents: localDocuments !== null || remoteDocuments !== null
-        ? mergeById(localDocuments ?? [], remoteDocuments ?? [])
-        : null,
-    });
-    const sourceLabel = (local: boolean, remote: boolean) => local
-      ? remote ? "dispositivo local + D1 (prioridade local)" : "dispositivo local; D1 indisponível"
-      : remote ? "D1 como fallback; leitura local indisponível" : "indisponível";
-    setAnalysisSources({
-      finances: sourceLabel(localFinances !== null, remoteFinances !== null),
-      documents: sourceLabel(localDocuments !== null, remoteDocuments !== null),
-    });
-
-    const failures: string[] = [];
-    analysisLocalErrorsRef.current = [];
-    if (localFinancesResult.status === "rejected") {
-      analysisLocalErrorsRef.current.push("Finanças locais indisponíveis");
-      failures.push("Finanças locais indisponíveis");
+  const createCalendarEvent = async () => {
+    if (!canManageCalendar) {
+      setCalendarError("A criação exige o modo remoto, acesso desbloqueado e Google Calendar autorizado.");
+      return;
     }
-    if (remoteFinancesResult.status === "rejected")
-      failures.push("D1 de finanças indisponível; dados locais mantidos");
-    if (localDocumentsResult.status === "rejected") {
-      analysisLocalErrorsRef.current.push("Documentos locais indisponíveis");
-      failures.push("Documentos locais indisponíveis");
+    const summary = calendarCreateDraft.summary.trim();
+    const startValue = calendarCreateDraft.start;
+    const endValue = calendarCreateDraft.end;
+    if (!summary || !startValue || !endValue) {
+      setCalendarError("Informe o título, a data/hora inicial e a data/hora final.");
+      return;
     }
-    if (remoteDocumentsResult.status === "rejected")
-      failures.push("D1 de documentos indisponível; dados locais mantidos");
-    setAnalysisError(failures.join(". "));
-    setAnalysisLoading(false);
-  };
+    const startTime = Date.parse(startValue);
+    const endTime = Date.parse(endValue);
+    if (!Number.isFinite(startTime) || !Number.isFinite(endTime)) {
+      setCalendarError("Informe datas e horários válidos.");
+      return;
+    }
+    if (endTime <= startTime) {
+      setCalendarError("A data/hora final precisa ser posterior à inicial.");
+      return;
+    }
 
-  const retryFailedAnalysisReads = async () => {
-    const retry = { ...analysisRetryAfterUnlockRef.current };
-    if ((!retry.finances && !retry.documents) || !isIrisRemoteModeEnabled() || !isIrisAccessUnlocked()) return;
-    setAnalysisLoading(true);
-    const [financesResult, documentsResult] = await Promise.all([
-      retry.finances
-        ? loadIrisData("finances").then(
-            (value) => ({ status: "fulfilled" as const, value }),
-            (reason) => ({ status: "rejected" as const, reason }),
-          )
-        : Promise.resolve(null),
-      retry.documents
-        ? loadIrisData("documents").then(
-            (value) => ({ status: "fulfilled" as const, value }),
-            (reason) => ({ status: "rejected" as const, reason }),
-          )
-        : Promise.resolve(null),
-    ]);
+    let start: GoogleCalendarDate;
+    let end: GoogleCalendarDate;
+    try {
+      start = buildCalendarDateTime(startValue);
+      end = buildCalendarDateTime(endValue);
+    } catch (error) {
+      setCalendarError(error instanceof Error ? error.message : "Não foi possível converter a data no fuso local.");
+      return;
+    }
 
-    const remoteFinances = financesResult?.status === "fulfilled"
-      ? financesResult.value.items
-          .map((row, index) => normalizeFinanceRow({ ...(recordValue(row.payload) ?? {}), ...row }, index))
-          .filter((row): row is AnalysisFinanceRow => row !== null)
-      : null;
-    const remoteDocuments = documentsResult?.status === "fulfilled"
-      ? documentsResult.value.items
-          .map((row, index) => normalizeDocumentRow({ ...(recordValue(row.payload) ?? {}), ...row }, index))
-          .filter((row): row is AnalysisDocumentRow => row !== null)
-      : null;
+    if (!window.confirm(
+      `Confirmar criação deste evento no Google Calendar?\n\nTítulo: ${summary}\nInício: ${startValue.replace("T", " ")}\nFim: ${endValue.replace("T", " ")}\n\nO evento só será enviado após esta confirmação.`,
+    )) return;
 
-    setAnalysisRows((current) => ({
-      finances: remoteFinances === null ? current.finances : mergeById(current.finances ?? [], remoteFinances),
-      documents: remoteDocuments === null ? current.documents : mergeById(current.documents ?? [], remoteDocuments),
-    }));
-    setAnalysisSources((current) => ({
-      finances: remoteFinances === null
-        ? current.finances
-        : current.finances.includes("dispositivo local")
-          ? "dispositivo local + D1 (prioridade local)"
-          : "D1 como fallback; leitura local indisponível",
-      documents: remoteDocuments === null
-        ? current.documents
-        : current.documents.includes("dispositivo local")
-          ? "dispositivo local + D1 (prioridade local)"
-          : "D1 como fallback; leitura local indisponível",
-    }));
-
-    const failures: string[] = [...analysisLocalErrorsRef.current];
-    if (retry.finances && financesResult?.status === "rejected") failures.push("D1 de finanças indisponível; dados locais mantidos");
-    if (retry.documents && documentsResult?.status === "rejected") failures.push("D1 de documentos indisponível; dados locais mantidos");
-    analysisRetryAfterUnlockRef.current = {
-      finances: retry.finances && financesResult?.status === "rejected",
-      documents: retry.documents && documentsResult?.status === "rejected",
-    };
-    setAnalysisError(failures.join(". "));
-    setAnalysisLoading(false);
+    setCalendarCreateBusy(true);
+    setCalendarError("");
+    try {
+      await googleCalendarCreate({ summary, start, end }, true);
+      setCalendarCreateDraft({ summary: "", start: "", end: "" });
+      setCalendarMessage("Evento criado no Google Calendar.");
+      await refreshCalendar();
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : "Falha ao criar o evento.";
+      setCalendarMessage("A agenda não foi alterada.");
+      setCalendarError(detail);
+    } finally {
+      setCalendarCreateBusy(false);
+    }
   };
 
   const beginCalendarEdit = (event: GoogleCalendarEvent) => {
+    if (!canManageCalendar) return;
     const allDay = Boolean(event.start?.date);
     const eventStart = event.start as GoogleCalendarDate | undefined;
     const eventEnd = event.end as GoogleCalendarDate | undefined;
@@ -686,6 +607,10 @@ export default function CommandCenter54() {
   };
 
   const saveCalendarEdit = async () => {
+    if (!canManageCalendar) {
+      setCalendarError("A alteração exige o modo remoto, acesso desbloqueado e Google Calendar autorizado.");
+      return;
+    }
     if (!calendarDraft || !editingCalendarEventId) return;
     const event = calendarEvents.find((candidate) => candidate.id === editingCalendarEventId);
     if (!event) return;
@@ -751,6 +676,10 @@ export default function CommandCenter54() {
   };
 
   const deleteCalendarEvent = async (event: GoogleCalendarEvent) => {
+    if (!canManageCalendar) {
+      setCalendarError("A exclusão exige o modo remoto, acesso desbloqueado e Google Calendar autorizado.");
+      return;
+    }
     const title = event.summary?.trim() || "Compromisso sem título";
     const start = calendarDateForDisplay(event.start as GoogleCalendarDate | undefined);
     const end = calendarDateForDisplay(event.end as GoogleCalendarDate | undefined);
@@ -774,52 +703,6 @@ export default function CommandCenter54() {
     } finally {
       setCalendarActionBusyId(null);
     }
-  };
-
-  const generateLocalAnalysisReport = () => {
-    const finances = analysisRows.finances;
-    const documents = analysisRows.documents;
-    const income = finances?.filter((row) => row.type === "income").reduce((sum, row) => sum + row.amount, 0) ?? null;
-    const expenses = finances?.filter((row) => row.type === "expense").reduce((sum, row) => sum + row.amount, 0) ?? null;
-    const categories = new Map<string, { income: number; expense: number }>();
-    for (const row of finances ?? []) {
-      const totals = categories.get(row.category) ?? { income: 0, expense: 0 };
-      totals[row.type] += row.amount;
-      categories.set(row.category, totals);
-    }
-    const today = new Date().toISOString().slice(0, 10);
-    const openEntries = finances?.filter((row) => row.status !== "paid") ?? null;
-    const overdueEntries = finances?.filter((row) =>
-      row.status === "overdue" || (row.status === "open" && row.dueAt && row.dueAt < today),
-    ) ?? null;
-    const radarPending = items.filter((item) => item.status !== "completed").length;
-    const lines = [
-      "IRIS — RESUMO LOCAL VERIFICÁVEL",
-      `Gerado em: ${new Date().toLocaleString("pt-BR")}`,
-      "Este relatório foi calculado neste dispositivo a partir dos lançamentos disponíveis; nenhuma informação pessoal foi enviada à IA.",
-      `Fonte de finanças: ${analysisSources.finances}.`,
-      `Fonte de documentos: ${analysisSources.documents}.`,
-      "",
-      `Lançamentos financeiros: ${finances === null ? "indisponível" : finances.length}`,
-      `Renda/receitas: ${income === null ? "indisponível" : formatBrl(income)}`,
-      `Despesas: ${expenses === null ? "indisponível" : formatBrl(expenses)}`,
-      `Pendências financeiras em aberto: ${openEntries === null ? "indisponível" : openEntries.length}`,
-      `Pendências financeiras vencidas: ${overdueEntries === null ? "indisponível" : overdueEntries.length}`,
-      `Documentos: ${documents === null ? "indisponível" : documents.length}`,
-      `Pendências exibidas no Radar: ${radarPending} (lista atual; pode incluir exemplos no modo de demonstração).`,
-      "",
-      "Somas por categoria:",
-      ...(finances === null
-        ? ["- Indisponíveis: a fonte de lançamentos não pôde ser lida."]
-        : categories.size
-          ? [...categories.entries()]
-              .sort(([left], [right]) => left.localeCompare(right, "pt-BR"))
-              .map(([category, totals]) => `- ${category}: receitas ${formatBrl(totals.income)}; despesas ${formatBrl(totals.expense)}; total ${formatBrl(totals.income + totals.expense)}.`)
-          : ["- Nenhum lançamento financeiro disponível para somar."]),
-      "",
-      "Nota: é um resumo determinístico dos registros carregados, não uma análise completa por IA.",
-    ];
-    setAnalysisReport(lines.join("\n"));
   };
 
   useEffect(() => {
@@ -872,17 +755,32 @@ export default function CommandCenter54() {
 
   useEffect(() => {
     if (activeView === "agenda") void refreshCalendar();
-    if (activeView === "analises") {
-      setAnalysisReport(null);
-      void refreshAnalysisData();
-    }
   }, [activeView]);
 
   useEffect(() => {
     const onRemoteAccessChanged = () => {
       const ready = isIrisRemoteModeEnabled() && isIrisAccessUnlocked();
       setRemoteAccessReady(ready);
-      if (!ready) return;
+      if (!ready) {
+        setCalendarAuthorized(false);
+        setCalendarEvents([]);
+        setEditingCalendarEventId(null);
+        setCalendarDraft(null);
+        setCalendarError("");
+        setCalendarAccessHelp("settings");
+        if (!isIrisRemoteModeEnabled()) {
+          calendarRetryAfterUnlockRef.current = false;
+          setCalendarMessage(
+            "A Agenda do Google está bloqueada intencionalmente no modo Demonstração. Nenhum dado foi enviado. Ative o acesso remoto em Configurações somente se quiser usar esse recurso.",
+          );
+        } else {
+          calendarRetryAfterUnlockRef.current = true;
+          setCalendarMessage(
+            "A Agenda exige uma sessão remota desbloqueada. Nenhuma consulta de compromissos foi enviada; desbloqueie o acesso remoto em Configurações para continuar.",
+          );
+        }
+        return;
+      }
       if (radarRetryAfterUnlockRef.current) {
         radarRetryAfterUnlockRef.current = false;
         void refreshRadar();
@@ -890,9 +788,6 @@ export default function CommandCenter54() {
       if (activeView === "agenda" && calendarRetryAfterUnlockRef.current) {
         calendarRetryAfterUnlockRef.current = false;
         void refreshCalendar();
-      }
-      if (activeView === "analises" && (analysisRetryAfterUnlockRef.current.finances || analysisRetryAfterUnlockRef.current.documents)) {
-        void retryFailedAnalysisReads();
       }
     };
     window.addEventListener("iris-access-changed", onRemoteAccessChanged);
@@ -939,14 +834,6 @@ export default function CommandCenter54() {
     retry: false,
   });
   const updateVoiceProfile = trpc.voice.updateProfile.useMutation();
-  const userFiles = trpc.documents.list.useQuery(undefined, {
-    enabled: isAuthenticated && remoteAccessReady,
-    retry: false,
-  });
-  const costStatus = trpc.control.costStatus.useQuery(undefined, {
-    enabled: isAuthenticated && remoteAccessReady,
-    retry: false,
-  });
 
   useEffect(() => {
     if (preference.data?.provider) setAiProvider(preference.data.provider);
@@ -1544,7 +1431,7 @@ export default function CommandCenter54() {
           detail: proposal?.detail || "Ação proposta pela Iris IA",
           date: proposal?.date || "amanhã",
           priority: (proposal?.priority || "importante") as Priority,
-          action: proposal?.action || "Acompanhar no Radar",
+          action: proposal?.action || "Acompanhar tarefa",
           riskLevel: operationalPlan.riskLevel,
           confidence: 0.95,
           status: "pending",
@@ -1698,7 +1585,7 @@ export default function CommandCenter54() {
   };
 
   const removeItem = async (id: number) => {
-    if (!window.confirm("Excluir este item do Radar?")) return;
+    if (!window.confirm("Excluir esta tarefa?")) return;
     if (!isAuthenticated) {
       setItems((current) => current.filter((item) => item.id !== id));
       return;
@@ -1907,39 +1794,6 @@ export default function CommandCenter54() {
 
             <button
               type="button"
-              className="iris54-quick-btn"
-              onClick={() => setActiveView("arquivos")}
-            >
-              <span className="icon">
-                <FileText size={17} />
-              </span>
-              Arquivos
-            </button>
-
-            <button
-              type="button"
-              className="iris54-quick-btn"
-              onClick={() => setActiveView("analises")}
-            >
-              <span className="icon">
-                <BarChart3 size={17} />
-              </span>
-              Análises
-            </button>
-
-            <button
-              type="button"
-              className="iris54-quick-btn"
-              onClick={() => setActiveView("ferramentas")}
-            >
-              <span className="icon">
-                <Wrench size={17} />
-              </span>
-              Ferramentas
-            </button>
-
-            <button
-              type="button"
               className={`iris54-quick-btn ${menuOpen ? "active" : ""}`}
               onClick={() => setMenuOpen((value) => !value)}
               aria-expanded={menuOpen}
@@ -1957,30 +1811,48 @@ export default function CommandCenter54() {
               className="iris54-module-menu"
               role="menu"
             >
-              <Link href="/documentos" onClick={() => setMenuOpen(false)}>
-                Arquivo Inteligente
-              </Link>
-              <Link href="/catalogo" onClick={() => setMenuOpen(false)}>
-                Catálogo
-              </Link>
-              <Link href="/comercial" onClick={() => setMenuOpen(false)}>
-                Comercial
-              </Link>
-              <Link href="/offline" onClick={() => setMenuOpen(false)}>
-                Offline
-              </Link>
-              <Link href="/midia" onClick={() => setMenuOpen(false)}>
-                Mídia
-              </Link>
-              <Link href="/seguranca" onClick={() => setMenuOpen(false)}>
-                Segurança
-              </Link>
-              <Link href="/diagnostico" onClick={() => setMenuOpen(false)}>
-                Diagnóstico
-              </Link>
-              <Link href="/configuracoes" onClick={() => setMenuOpen(false)}>
-                Configurações
-              </Link>
+              {homeMenuItems.map((item) => (
+                <button
+                  key={item.label}
+                  type="button"
+                  role="menuitem"
+                  onClick={() => openHomeMenuItem(item)}
+                  style={{
+                    padding: "10px 12px",
+                    border: 0,
+                    borderRadius: 10,
+                    color: "#cbd5e1",
+                    background: "rgba(14, 26, 48, 0.72)",
+                    textAlign: "center",
+                    fontSize: 13,
+                    fontFamily: "inherit",
+                    cursor: "pointer",
+                  }}
+                >
+                  {item.label}
+                </button>
+              ))}
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => {
+                  toggleTheme?.();
+                  setMenuOpen(false);
+                }}
+                style={{
+                  padding: "10px 12px",
+                  border: 0,
+                  borderRadius: 10,
+                  color: "#cbd5e1",
+                  background: "rgba(14, 26, 48, 0.72)",
+                  textAlign: "center",
+                  fontSize: 13,
+                  fontFamily: "inherit",
+                  cursor: "pointer",
+                }}
+              >
+                {theme === "dark" ? "Ativar modo claro" : "Ativar modo escuro"}
+              </button>
             </div>
           )}
         </section>
@@ -2114,9 +1986,9 @@ export default function CommandCenter54() {
               <>
                 <div className="iris54-view-header">
                   <div>
-                    <span className="iris54-kicker">SUA ATENÇÃO · RADAR</span>
+                    <span className="iris54-kicker">TAREFAS E LEMBRETES</span>
                     <h2>
-                      <Layers size={20} color="#38bdf8" /> Radar do Iris
+                      <Layers size={20} color="#38bdf8" /> Tarefas
                     </h2>
                     <p>
                       O que merece sua atenção agora, organizado em tempo real.
@@ -2147,7 +2019,7 @@ export default function CommandCenter54() {
                 <div className="iris54-stats-grid">
                   <div className="iris54-stat-card">
                     <strong>{radarStats.total}</strong>
-                    <span>Total no Radar</span>
+                    <span>Total de tarefas</span>
                   </div>
                   <div className="iris54-stat-card">
                     <strong style={{ color: "var(--iris-yellow)" }}>
@@ -2305,7 +2177,7 @@ export default function CommandCenter54() {
                     </h2>
                     <p>
                       Digite a tarefa em linguagem natural ou adicione
-                      diretamente ao Radar.
+                      diretamente à lista de tarefas.
                     </p>
                   </div>
                   <button
@@ -2354,7 +2226,7 @@ export default function CommandCenter54() {
                       onClick={handleCreateTask}
                       style={{ background: "var(--iris-blue)", color: "#fff" }}
                     >
-                      Salvar no Radar
+                      Salvar tarefa
                     </Button>
                   </div>
                 </div>
@@ -2382,7 +2254,7 @@ export default function CommandCenter54() {
                       type="button"
                       variant="outline"
                       onClick={() => void refreshCalendar()}
-                      disabled={calendarLoading || calendarActionBusyId !== null}
+                      disabled={!remoteAccessReady || !isIrisRemoteModeEnabled() || calendarLoading || calendarActionBusyId !== null || calendarCreateBusy}
                       aria-label="Atualizar agenda"
                     >
                       <RefreshCw size={15} className={calendarLoading ? "animate-spin" : ""} />
@@ -2401,11 +2273,66 @@ export default function CommandCenter54() {
 
                 {calendarMessage && <p className="iris54-source-message" role="status">{calendarMessage}</p>}
                 {calendarError && <p className="iris54-source-error" role="alert">{calendarError}</p>}
+                {calendarAccessHelp && (
+                  <p style={{ margin: "0 0 16px" }}>
+                    <Link
+                      href={calendarAccessHelp === "settings" ? "/configuracoes" : "/conexoes"}
+                      className="iris54-top-btn"
+                      style={{ display: "inline-flex", alignItems: "center", gap: 6, textDecoration: "none" }}
+                    >
+                      {calendarAccessHelp === "settings" ? "Abrir Configurações" : "Abrir Conexões"}
+                      <ExternalLink size={14} />
+                    </Link>
+                  </p>
+                )}
+                {canManageCalendar && (
+                  <section className="iris54-feature-card" style={{ marginBottom: 20 }} aria-label="Criar evento no Google Calendar">
+                    <h3 style={{ marginTop: 0 }}>Criar evento no Google Calendar</h3>
+                    <div className="iris54-calendar-edit-form">
+                      <label className="iris54-calendar-field">
+                        Título
+                        <input
+                          type="text"
+                          value={calendarCreateDraft.summary}
+                          onChange={(e) => setCalendarCreateDraft((current) => ({ ...current, summary: e.target.value }))}
+                          autoComplete="off"
+                        />
+                      </label>
+                      <div className="iris54-calendar-date-fields">
+                        <label className="iris54-calendar-field">
+                          Início
+                          <input
+                            type="datetime-local"
+                            value={calendarCreateDraft.start}
+                            onChange={(e) => setCalendarCreateDraft((current) => ({ ...current, start: e.target.value }))}
+                          />
+                        </label>
+                        <label className="iris54-calendar-field">
+                          Fim
+                          <input
+                            type="datetime-local"
+                            value={calendarCreateDraft.end}
+                            onChange={(e) => setCalendarCreateDraft((current) => ({ ...current, end: e.target.value }))}
+                          />
+                        </label>
+                      </div>
+                      <div className="iris54-calendar-event-actions">
+                        <Button
+                          type="button"
+                          onClick={() => void createCalendarEvent()}
+                          disabled={calendarCreateBusy || calendarLoading || calendarActionBusyId !== null}
+                        >
+                          <Plus size={14} /> {calendarCreateBusy ? "Criando…" : "Criar evento"}
+                        </Button>
+                      </div>
+                    </div>
+                  </section>
+                )}
                 <div className="iris54-feature-grid">
                   {calendarEvents.length ? calendarEvents.slice(0, 12).map((event) => (
                     <article className="iris54-feature-card iris54-calendar-event-card" key={event.id}>
                       <span className="iris54-priority-badge" style={{ background: "rgba(59, 130, 246, 0.2)", color: "#93c5fd" }}>CALENDAR</span>
-                      {editingCalendarEventId === event.id && calendarDraft ? (
+                      {editingCalendarEventId === event.id && calendarDraft && canManageCalendar ? (
                         <div className="iris54-calendar-edit-form">
                           <label className="iris54-calendar-field">
                             Título
@@ -2487,12 +2414,12 @@ export default function CommandCenter54() {
                           </p>
                           {event.location && <p>Local: {event.location}</p>}
                           {event.description && <p>{event.description}</p>}
-                          <div className="iris54-calendar-event-actions">
+                          {canManageCalendar && <div className="iris54-calendar-event-actions">
                             <Button
                               type="button"
                               variant="outline"
                               onClick={() => beginCalendarEdit(event)}
-                              disabled={calendarActionBusyId !== null || calendarLoading}
+                              disabled={!canManageCalendar || calendarActionBusyId !== null || calendarLoading || calendarCreateBusy}
                               aria-label={`Editar ${event.summary || "compromisso"}`}
                             >
                               <Pencil size={14} /> Editar
@@ -2501,17 +2428,17 @@ export default function CommandCenter54() {
                               type="button"
                               variant="outline"
                               onClick={() => void deleteCalendarEvent(event)}
-                              disabled={calendarActionBusyId !== null || calendarLoading}
+                              disabled={!canManageCalendar || calendarActionBusyId !== null || calendarLoading || calendarCreateBusy}
                               aria-label={`Excluir ${event.summary || "compromisso"}`}
                             >
                               {calendarActionBusyId === event.id ? <Loader2 size={14} className="animate-spin" /> : <X size={14} />}
                               {calendarActionBusyId === event.id ? "Excluindo…" : "Excluir"}
                             </Button>
-                          </div>
+                          </div>}
                         </>
                       )}
                     </article>
-                  )) : !calendarLoading && !calendarError ? (
+                  )) : !calendarLoading && !calendarError && !calendarAccessHelp ? (
                     <div className="iris54-feature-card">
                       <strong>Agenda sem compromissos futuros</strong>
                       <p>{calendarMessage}</p>
@@ -2540,615 +2467,7 @@ export default function CommandCenter54() {
               </>
             )}
 
-            {/* 5. MÓDULO: ARQUIVOS & DOCUMENT INTELLIGENCE */}
-            {activeView === "arquivos" && (
-              <>
-                <div className="iris54-view-header">
-                  <div>
-                    <span className="iris54-kicker">
-                      DOCUMENT INTELLIGENCE · CENTRO DOCUMENTAL
-                    </span>
-                    <h2>
-                      <FileText size={20} color="#34d399" /> Arquivos e
-                      Documentos
-                    </h2>
-                    <p>
-                      PDFs, imagens, planilhas, notas fiscais, pedidos, boletos,
-                      contratos e exames sob controle seguro.
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    className="iris54-close-btn"
-                    onClick={() => setActiveView(null)}
-                    aria-label="Fechar"
-                  >
-                    <X size={18} />
-                  </button>
-                </div>
-
-                {/* CONSULTAS RÁPIDAS DE DOCUMENT INTELLIGENCE */}
-                <div
-                  style={{
-                    display: "flex",
-                    gap: 8,
-                    flexWrap: "wrap",
-                    marginBottom: 16,
-                  }}
-                >
-                  <button
-                    type="button"
-                    className="iris54-filter-btn active"
-                    onClick={() => {
-                      void sendMessage(
-                        "O que tem nos meus documentos recentes e quais assuntos estão cadastrados?",
-                      );
-                    }}
-                  >
-                    <Sparkles
-                      size={13}
-                      style={{
-                        display: "inline",
-                        verticalAlign: "middle",
-                        marginRight: 4,
-                      }}
-                    />
-                    O que tem nesse documento?
-                  </button>
-                  <button
-                    type="button"
-                    className="iris54-filter-btn"
-                    onClick={() => {
-                      void sendMessage(
-                        "Encontre os documentos e notas fiscais relacionados a compras e pagamentos.",
-                      );
-                    }}
-                  >
-                    Notas fiscais &amp; Pedidos
-                  </button>
-                  <button
-                    type="button"
-                    className="iris54-filter-btn"
-                    onClick={() => {
-                      void sendMessage(
-                        "Localize contratos, apólices de seguro e boletos cadastrados.",
-                      );
-                    }}
-                  >
-                    Contratos &amp; Boletos
-                  </button>
-                  <button
-                    type="button"
-                    className="iris54-filter-btn"
-                    onClick={() => setActiveView("saude")}
-                  >
-                    Exames de Saúde
-                  </button>
-                </div>
-
-                <div className="iris54-feature-grid">
-                  <div className="iris54-feature-card">
-                    <div
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 8,
-                        marginBottom: 4,
-                      }}
-                    >
-                      <FileText size={16} color="#34d399" />
-                      <strong>PDFs &amp; Contratos</strong>
-                    </div>
-                    <p>
-                      Apólices de seguro, contratos de aluguel e certidões
-                      organizados com busca de conteúdo.
-                    </p>
-                  </div>
-                  <div className="iris54-feature-card">
-                    <div
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 8,
-                        marginBottom: 4,
-                      }}
-                    >
-                      <Layers size={16} color="#38bdf8" />
-                      <strong>Notas Fiscais &amp; Boletos</strong>
-                    </div>
-                    <p>
-                      Identificação de valores, datas de vencimento e histórico
-                      financeiro catalogado.
-                    </p>
-                  </div>
-                  <div className="iris54-feature-card">
-                    <div
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 8,
-                        marginBottom: 4,
-                      }}
-                    >
-                      <Activity size={16} color="#22d3ee" />
-                      <strong>Laudos &amp; Exames</strong>
-                    </div>
-                    <p>
-                      Laudos médicos associados à Central de Saúde para extração
-                      de biomarcadores.
-                    </p>
-                  </div>
-                </div>
-
-                {/* LISTAGEM DE ARQUIVOS REGISTRADOS */}
-                <div style={{ marginTop: 20 }}>
-                  <div
-                    style={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      alignItems: "center",
-                      marginBottom: 10,
-                    }}
-                  >
-                    <strong style={{ fontSize: 14, color: "#fff" }}>
-                      Arquivos Armazenados ({userFiles.data?.length ?? 0})
-                    </strong>
-                    <span style={{ fontSize: 12, color: "var(--iris-muted)" }}>
-                      Criptografia em repouso · Custo zero
-                    </span>
-                  </div>
-
-                  {(userFiles.data?.length ?? 0) === 0 ? (
-                    <div
-                      style={{
-                        padding: "24px 16px",
-                        borderRadius: 14,
-                        background: "rgba(10, 19, 36, 0.5)",
-                        border: "1px dashed var(--iris-border)",
-                        textAlign: "center",
-                        color: "var(--iris-muted)",
-                        fontSize: 13,
-                      }}
-                    >
-                      Envie documentos pelo chat da Iris ou pela Central de
-                      Saúde para ativar a pesquisa documental inteligente.
-                    </div>
-                  ) : (
-                    <div
-                      style={{
-                        display: "flex",
-                        flexDirection: "column",
-                        gap: 8,
-                      }}
-                    >
-                      {(userFiles.data ?? []).slice(0, 5).map((file) => (
-                        <div
-                          key={file.id}
-                          style={{
-                            padding: "10px 14px",
-                            borderRadius: 12,
-                            background: "rgba(14, 26, 48, 0.55)",
-                            border: "1px solid var(--iris-border)",
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "space-between",
-                          }}
-                        >
-                          <div
-                            style={{
-                              display: "flex",
-                              alignItems: "center",
-                              gap: 10,
-                            }}
-                          >
-                            <FileText size={16} color="#38bdf8" />
-                            <div>
-                              <strong style={{ fontSize: 13, color: "#fff" }}>
-                                {file.originalName}
-                              </strong>
-                              <div
-                                style={{
-                                  fontSize: 11,
-                                  color: "var(--iris-muted)",
-                                }}
-                              >
-                                {(file.sizeBytes / 1024).toFixed(1)} KB ·{" "}
-                                {file.mimeType}
-                              </div>
-                            </div>
-                          </div>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => {
-                              void sendMessage(
-                                `O que tem no documento "${file.originalName}"?`,
-                              );
-                            }}
-                          >
-                            Analisar com Iris
-                          </Button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                <div
-                  style={{
-                    marginTop: 20,
-                    display: "flex",
-                    justifyContent: "flex-end",
-                    gap: 10,
-                  }}
-                >
-                  <Button
-                    onClick={() => {
-                      void sendMessage(
-                        "Encontre os documentos relacionados a determinado assunto.",
-                      );
-                    }}
-                    style={{ background: "var(--iris-green)", color: "#fff" }}
-                  >
-                    Buscar Arquivo com a Iris IA
-                  </Button>
-                </div>
-              </>
-            )}
-
-            {/* 6. MÓDULO: ANÁLISES */}
-            {activeView === "analises" && (
-              <>
-                <div className="iris54-view-header">
-                  <div>
-                    <span className="iris54-kicker">
-                      INSIGHTS &amp; INTELIGÊNCIA
-                    </span>
-                    <h2>
-                      <BarChart3 size={20} color="#f59e0b" /> Análises da Iris
-                      IA
-                    </h2>
-                    <p>
-                      Diagnósticos proativos, economia inteligente e previsões.
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    className="iris54-close-btn"
-                    onClick={() => setActiveView(null)}
-                    aria-label="Fechar"
-                  >
-                    <X size={18} />
-                  </button>
-                </div>
-
-                {analysisLoading && <p className="iris54-source-message" role="status">Atualizando fontes locais e remotas…</p>}
-                {analysisError && <p className="iris54-source-error" role="alert">{analysisError}</p>}
-                <div className="iris54-feature-grid">
-                  <button
-                    type="button"
-                    className="iris54-feature-card iris54-feature-card-action"
-                    onClick={() => navigate("/financas")}
-                    aria-label="Abrir Finanças"
-                  >
-                    <span className="iris54-kicker">FINANÇAS · RESUMO LOCAL</span>
-                    <strong>Finanças carregadas</strong>
-                    <p>
-                      {analysisLoading ? "Atualizando…" : analysisRows.finances === null ? "Contagem indisponível" : `${analysisRows.finances.length} lançamento(s) encontrados.`}
-                      <br />Fonte: {analysisSources.finances}.
-                    </p>
-                  </button>
-                  <button
-                    type="button"
-                    className="iris54-feature-card iris54-feature-card-action"
-                    onClick={() => navigate("/documentos")}
-                    aria-label="Abrir Documentos"
-                  >
-                    <span className="iris54-kicker">DOCUMENTOS</span>
-                    <strong>Arquivo catalogado</strong>
-                    <p>
-                      {analysisLoading ? "Atualizando…" : analysisRows.documents === null ? "Contagem indisponível" : `${analysisRows.documents.length} documento(s) encontrados.`}
-                      <br />Fonte: {analysisSources.documents}.
-                    </p>
-                  </button>
-                  <button
-                    type="button"
-                    className="iris54-feature-card iris54-feature-card-action"
-                    onClick={() => setActiveView("radar")}
-                    aria-label="Abrir Radar de pendências"
-                  >
-                    <span className="iris54-kicker">RADAR</span>
-                    <strong>Pendências atuais</strong>
-                    <p>{items.filter((item) => item.status !== "completed").length} item(ns) não concluído(s) na lista atual.</p>
-                  </button>
-                </div>
-
-                <div
-                  style={{
-                    marginTop: 24,
-                    display: "flex",
-                    justifyContent: "flex-end",
-                  }}
-                >
-                  <Button
-                    onClick={generateLocalAnalysisReport}
-                    disabled={analysisLoading}
-                    style={{
-                      background: "var(--iris-yellow)",
-                      color: "#000",
-                      fontWeight: 700,
-                    }}
-                  >
-                    {analysisLoading ? "Carregando fontes…" : "Gerar Novo Relatório"}
-                  </Button>
-                </div>
-                {analysisReport && (
-                  <section className="iris54-local-report" aria-labelledby="iris54-local-report-title">
-                    <div className="iris54-local-report-header">
-                      <div>
-                        <span className="iris54-kicker">RESUMO LOCAL VERIFICÁVEL</span>
-                        <strong id="iris54-local-report-title">Relatório calculado neste dispositivo</strong>
-                      </div>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        onClick={() => downloadBlob("iris-resumo-local.txt", analysisReport, "text/plain;charset=utf-8")}
-                      >
-                        <Download size={15} /> Baixar texto
-                      </Button>
-                    </div>
-                    <pre>{analysisReport}</pre>
-                  </section>
-                )}
-              </>
-            )}
-
-            {/* 7. MÓDULO: FERRAMENTAS & SEGURANÇA */}
-            {activeView === "ferramentas" && (
-              <>
-                <div className="iris54-view-header">
-                  <div>
-                    <span className="iris54-kicker">
-                      CONEXÕES &amp; GOVERNANÇA
-                    </span>
-                    <h2>
-                      <Wrench size={20} color="#a78bfa" /> Ferramentas do
-                      Sistema
-                    </h2>
-                    <p>
-                      Conectores de integração, módulos avançados e políticas de
-                      segurança.
-                    </p>
-                  </div>
-                  <div
-                    style={{ display: "flex", gap: 8, alignItems: "center" }}
-                  >
-                    <button
-                      type="button"
-                      className="iris54-top-btn"
-                      onClick={() => toggleTheme?.()}
-                      title={theme === "dark" ? "Modo Claro" : "Modo Escuro"}
-                    >
-                      {theme === "dark" ? (
-                        <Sun size={15} />
-                      ) : (
-                        <Moon size={15} />
-                      )}
-                      <span style={{ fontSize: 12 }}>
-                        {theme === "dark" ? "Modo Claro" : "Modo Escuro"}
-                      </span>
-                    </button>
-                    <button
-                      type="button"
-                      className="iris54-close-btn"
-                      onClick={() => setActiveView(null)}
-                      aria-label="Fechar"
-                    >
-                      <X size={18} />
-                    </button>
-                  </div>
-                </div>
-
-                <div className="iris54-feature-grid">
-                  <div
-                    className="iris54-feature-card"
-                    style={{ cursor: "pointer" }}
-                    onClick={() => setActiveView("assistente")}
-                  >
-                    <div
-                      style={{ display: "flex", alignItems: "center", gap: 8 }}
-                    >
-                      <MessageCircle size={18} color="#22d3ee" />
-                      <strong>Conversar com a Iris IA</strong>
-                    </div>
-                    <p>
-                      Diálogo direto em linguagem natural, comandos e
-                      orientações personalizadas.
-                    </p>
-                  </div>
-                  <Link
-                    href="/interprete"
-                    className="iris54-feature-card"
-                    style={{ textDecoration: "none" }}
-                  >
-                    <div
-                      style={{ display: "flex", alignItems: "center", gap: 8 }}
-                    >
-                      <Languages size={18} color="#38bdf8" />
-                      <strong>Intérprete Multilíngue</strong>
-                    </div>
-                    <p>
-                      Tradução em tempo real e interpretação de diálogos por voz
-                      e texto.
-                    </p>
-                  </Link>
-                  <Link
-                    href="/conexoes"
-                    className="iris54-feature-card"
-                    style={{ textDecoration: "none" }}
-                  >
-                    <div
-                      style={{ display: "flex", alignItems: "center", gap: 8 }}
-                    >
-                      <Activity size={18} color="#34d399" />
-                      <strong>Conexões e Integrações</strong>
-                    </div>
-                    <p>
-                      Gerenciamento de integrações, permissões e serviços
-                      conectados.
-                    </p>
-                  </Link>
-                  <Link
-                    href="/perfil"
-                    className="iris54-feature-card"
-                    style={{ textDecoration: "none" }}
-                  >
-                    <div
-                      style={{ display: "flex", alignItems: "center", gap: 8 }}
-                    >
-                      <UserRound size={18} color="#a78bfa" />
-                      <strong>Perfil e Preferências</strong>
-                    </div>
-                    <p>
-                      Configurações de conta, chaves de IA, tema e memórias
-                      autorizadas.
-                    </p>
-                  </Link>
-                  <Link
-                    href="/operacao"
-                    className="iris54-feature-card"
-                    style={{ textDecoration: "none" }}
-                  >
-                    <div
-                      style={{ display: "flex", alignItems: "center", gap: 8 }}
-                    >
-                      <ShieldCheck size={18} color="#f59e0b" />
-                      <strong>Saúde da Operação</strong>
-                    </div>
-                    <p>
-                      Diagnóstico de conectores, filas de eventos e webhook do
-                      WhatsApp.
-                    </p>
-                  </Link>
-                  <Link
-                    href="/laboratorio"
-                    className="iris54-feature-card"
-                    style={{ textDecoration: "none" }}
-                  >
-                    <div
-                      style={{ display: "flex", alignItems: "center", gap: 8 }}
-                    >
-                      <SlidersHorizontal size={18} color="#ec4899" />
-                      <strong>Laboratório Local</strong>
-                    </div>
-                    <p>
-                      Testes avançados de modelos de inteligência e conectores
-                      universais.
-                    </p>
-                  </Link>
-                </div>
-
-                {/* CARDS DE SEGURANÇA E PRIVACIDADE */}
-                <div className="iris54-footer-cards">
-                  <div className="iris54-footer-card">
-                    <span className="iris54-kicker">AUTORIZAÇÃO SEGURA</span>
-                    <strong>Controle Absoluto</strong>
-                    <p>
-                      A Iris pede sua confirmação antes de executar qualquer
-                      ação sensível ou financeira.
-                    </p>
-                  </div>
-                  <div className="iris54-footer-card">
-                    <span className="iris54-kicker">MODO IRIS</span>
-                    <strong>Assistente Proativa</strong>
-                    <p>
-                      Analisa, organiza e sugere soluções mantendo seus dados
-                      protegidos.
-                    </p>
-                  </div>
-                  <div className="iris54-footer-card">
-                    <span className="iris54-kicker">PRIVACIDADE</span>
-                    <strong>Dados Protegidos</strong>
-                    <p>
-                      Seus dados permanecem criptografados e acessíveis
-                      exclusivamente por você.
-                    </p>
-                  </div>
-                </div>
-
-                {/* CONTROLE DE CUSTOS & GOVERNANÇA FINANCEIRA */}
-                <div
-                  style={{
-                    padding: "16px 20px",
-                    borderRadius: "16px",
-                    background: "rgba(14, 28, 54, 0.75)",
-                    border: "1px solid rgba(56, 189, 248, 0.3)",
-                    marginTop: 16,
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                    flexWrap: "wrap",
-                    gap: 12,
-                  }}
-                >
-                  <div>
-                    <span className="iris54-kicker">
-                      CUSTO DE IA · ARQUITETURA ECONÔMICA
-                    </span>
-                    <strong
-                      style={{
-                        display: "block",
-                        fontSize: "15px",
-                        color: "#fff",
-                      }}
-                    >
-                      Governança de Custos e Faturamento Zero
-                    </strong>
-                    <div
-                      style={{
-                        fontSize: "12px",
-                        color: "var(--iris-muted)",
-                        marginTop: 2,
-                      }}
-                    >
-                      Hoje:{" "}
-                      <span style={{ color: "#fff", fontWeight: 700 }}>
-                        R$ {(costStatus.data?.todayBrl ?? 0).toFixed(2)}
-                      </span>{" "}
-                      · Mês:{" "}
-                      <span style={{ color: "#fff", fontWeight: 700 }}>
-                        R$ {(costStatus.data?.monthBrl ?? 0).toFixed(2)}
-                      </span>{" "}
-                      · Limite Seguro:{" "}
-                      <span
-                        style={{ color: "var(--iris-cyan)", fontWeight: 700 }}
-                      >
-                        R$ {(costStatus.data?.limitBrl ?? 100).toFixed(2)}
-                      </span>
-                    </div>
-                  </div>
-                  <div
-                    style={{ display: "flex", alignItems: "center", gap: 10 }}
-                  >
-                    <span
-                      style={{
-                        padding: "4px 10px",
-                        borderRadius: "8px",
-                        background: "rgba(16, 185, 129, 0.15)",
-                        border: "1px solid rgba(16, 185, 129, 0.3)",
-                        color: "#34d399",
-                        fontSize: "12px",
-                        fontWeight: 700,
-                      }}
-                    >
-                      {costStatus.data?.status ?? "Dentro do limite"}
-                    </span>
-                  </div>
-                </div>
-              </>
-            )}
-
-            {/* 7. MÓDULO: SAÚDE (CENTRAL DE SAÚDE IRIS) */}
+            {/* MÓDULO: SAÚDE (CENTRAL DE SAÚDE IRIS) */}
             {activeView === "saude" && (
               <IrisHealthCenter onClose={() => setActiveView(null)} />
             )}

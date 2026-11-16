@@ -145,7 +145,7 @@ export default function SecurityCenter() {
     <main className="profile-page">
       <div className="profile-card">
         <Link href="/" className="back-link">
-          <ArrowLeft size={16} /> Voltar ao Radar
+          <ArrowLeft size={16} /> Voltar ao início
         </Link>
         <div className="profile-heading">
           <div className="profile-icon">
