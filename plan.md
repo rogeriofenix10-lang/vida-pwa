@@ -55,7 +55,7 @@ Acrescentar em `FinanceHub` o campo de titular opcional `Rogério`/`Aline` para 
 
 Lançamentos derivados distinguem titular herdado da fatura de override manual, inclusive fixar deliberadamente uma despesa como “Titular não definido”; a edição permite retornar a seguir a fatura. Se a releitura não encontrar linhas suficientes ou não reconciliar todo o histórico, preservar despesas, metadados e vencimento anterior (usado para determinar o período) e avisar sem alterar os totais históricos.
 
-A visualização inicial é “Visão conjunta — sem nomear titular”: soma os lançamentos dos titulares, omite o titular nas linhas e no resumo de faturas, e mantém seus dados inalterados no armazenamento. “Todos os titulares — nomes visíveis”, Rogério, Aline e “Titular não definido” continuam disponíveis. O CSV filtrado permanece consolidado e não contém coluna de titular.
+A visualização inicial é “Visão geral”: soma os lançamentos dos titulares, omite o titular nas linhas e no resumo de faturas, e mantém seus dados inalterados no armazenamento. “Todos os titulares — nomes visíveis”, Rogério, Aline e “Titular não definido” continuam disponíveis. O CSV filtrado permanece consolidado e não contém coluna de titular.
 
 
 ## Complemento — navegação sem duplicidade e Arquivo de Documentos (15/11/2026)
