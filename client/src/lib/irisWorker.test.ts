@@ -174,6 +174,62 @@ describe("Iris Worker device authentication", () => {
     expect(fetchMock.mock.calls.filter(([input]) => String(input).endsWith("/auth/device/revoke"))).toHaveLength(0);
   });
 
+  it("paginates accessible calendars and events with agenda-scoped identity and rejects reversed ranges", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = new URL(String(input));
+      if (url.pathname.endsWith("/auth/login")) return jsonResponse(authReply(ACCESS_TOKEN, INITIAL_REFRESH_TOKEN));
+      if (url.pathname.endsWith("/google/calendar/calendars")) {
+        return url.searchParams.get("pageToken") === "cal-page-2"
+          ? jsonResponse({ items: [{ id: "cal-b", summary: "Equipe", accessRole: "reader" }] })
+          : jsonResponse({ items: [{ id: "cal-a", summary: "Pessoal", primary: true, accessRole: "writer" }], nextPageToken: "cal-page-2" });
+      }
+      if (url.pathname.endsWith("/google/calendar/events")) {
+        const calendarId = url.searchParams.get("calendarId");
+        const pageToken = url.searchParams.get("pageToken");
+        if (calendarId === "cal-a" && pageToken === "events-page-2") {
+          return jsonResponse({ items: [{ id: "event-2", summary: "Segundo", start: { dateTime: "2026-11-02T12:00:00Z" } }] });
+        }
+        if (calendarId === "cal-a") {
+          return jsonResponse({ items: [{ id: "shared-id", summary: "Pessoal", start: { dateTime: "2026-11-01T12:00:00Z" } }], nextPageToken: "events-page-2" });
+        }
+        return jsonResponse({ items: [{ id: "shared-id", summary: "Equipe", start: { dateTime: "2026-11-03T12:00:00Z" } }] });
+      }
+      return jsonResponse({ error: "unexpected request", method: init?.method }, 500);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    await worker.unlockIrisAccess(MASTER_PASSWORD);
+
+    const result = await worker.googleCalendarEvents({
+      timeMin: "2026-11-01T00:00:00.000Z",
+      timeMax: "2026-12-01T00:00:00.000Z",
+    });
+    expect(result.pages).toBe(3);
+    expect(result.truncated).toBe(false);
+    expect(result.items.map((event) => event.identity)).toEqual(["cal-a:shared-id", "cal-a:event-2", "cal-b:shared-id"]);
+    expect(result.items.find((event) => event.calendarId === "cal-b")).toMatchObject({ calendarName: "Equipe", accessRole: "reader" });
+    const beforeInvalid = fetchMock.mock.calls.length;
+    await expect(worker.googleCalendarEvents({ timeMin: "2026-12-01T00:00:00Z", timeMax: "2026-11-01T00:00:00Z" })).rejects.toThrow(/período válido/i);
+    expect(fetchMock.mock.calls).toHaveLength(beforeInvalid);
+  });
+
+  it("preserves accessible events and explicitly reports a failed calendar as partial", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      const url = new URL(String(input));
+      if (url.pathname.endsWith("/auth/login")) return jsonResponse(authReply(ACCESS_TOKEN, INITIAL_REFRESH_TOKEN));
+      if (url.searchParams.get("calendarId") === "restricted") return jsonResponse({ error: "Agenda restrita" }, 403);
+      return jsonResponse({ items: [{ id: "safe-event", summary: "Reunião real", start: { dateTime: "2026-11-15T12:00:00Z" } }] });
+    }));
+    await worker.unlockIrisAccess(MASTER_PASSWORD);
+    const result = await worker.googleCalendarEvents({
+      timeMin: "2026-11-01T00:00:00Z", timeMax: "2026-12-01T00:00:00Z",
+      calendars: [{ id: "pessoal", summary: "Pessoal", accessRole: "owner" }, { id: "restricted", summary: "Restrita", accessRole: "freeBusyReader" }],
+    });
+    expect(result.items.map((item) => item.id)).toEqual(["safe-event"]);
+    expect(result.calendarsQueried.map((item) => item.id)).toEqual(["pessoal"]);
+    expect(result.truncated).toBe(true);
+    expect(result.warnings.some((warning) => warning.includes("Restrita"))).toBe(true);
+  });
+
   it("removes an invalid or revoked refresh credential", async () => {
     persisted.snapshot.credential = {
       deviceId: DEVICE_ID,

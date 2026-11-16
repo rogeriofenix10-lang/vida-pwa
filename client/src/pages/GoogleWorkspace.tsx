@@ -1,13 +1,15 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { ArrowLeft, ExternalLink, FolderOpen, Plus, RefreshCw } from "lucide-react";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
+import RemoteServiceAccess from "@/components/RemoteServiceAccess";
 import {
   googleDriveCreateFolder,
   googleDriveFiles,
   googleDriveStatus,
   isIrisAccessUnlocked,
   isIrisRemoteModeEnabled,
+  restoreIrisAccess,
   startGoogleOAuth,
   type GoogleDriveFile,
 } from "@/lib/irisWorker";
@@ -24,35 +26,35 @@ export default function GoogleWorkspace() {
   const [folder, setFolder] = useState("");
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
+  const [authorizing, setAuthorizing] = useState(false);
   const [creatingFolder, setCreatingFolder] = useState(false);
   const [remoteAccessReady, setRemoteAccessReady] = useState(
     () => isIrisRemoteModeEnabled() && isIrisAccessUnlocked(),
   );
-  const retryAfterUnlock = useRef(false);
-
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async (restoreSession = false) => {
     setLoading(true);
     setMessage("");
     if (!isIrisRemoteModeEnabled()) {
       setDriveAuthorized(false);
       setFiles([]);
       setMessage(demoMessage);
-      retryAfterUnlock.current = false;
       setLoading(false);
       return;
+    }
+
+    if (restoreSession && !isIrisAccessUnlocked()) {
+      await restoreIrisAccess();
     }
     if (!isIrisAccessUnlocked()) {
       setRemoteAccessReady(false);
       setDriveAuthorized(false);
       setFiles([]);
-      setMessage("O Google Drive exige uma sessão remota desbloqueada. Nenhuma consulta foi enviada; desbloqueie o acesso remoto em Configurações para continuar.");
-      retryAfterUnlock.current = true;
+      setMessage("O Google Drive exige uma sessão remota desbloqueada. A restauração foi tentada somente porque você clicou em Atualizar; nenhuma consulta Google foi enviada. Use o painel de acesso abaixo para entrar.");
       setLoading(false);
       return;
     }
 
     setRemoteAccessReady(true);
-    let failed = false;
     try {
       const status = await googleDriveStatus();
       const authorized = status.authorized === true;
@@ -61,20 +63,17 @@ export default function GoogleWorkspace() {
         try {
           setFiles((await googleDriveFiles()).files ?? []);
         } catch (error) {
-          failed = true;
           setMessage(messageFor(error, "Falha de rede ao consultar o Google Drive. Tente novamente."));
         }
       } else {
         setFiles([]);
       }
     } catch (error) {
-      failed = true;
       setDriveAuthorized(false);
       setFiles([]);
       setMessage(messageFor(error, "Falha de rede ao consultar o Google Drive. Tente novamente."));
     }
 
-    retryAfterUnlock.current = failed && !isIrisAccessUnlocked();
     setLoading(false);
   }, []);
 
@@ -89,13 +88,12 @@ export default function GoogleWorkspace() {
       if (!ready) {
         setDriveAuthorized(false);
         setFiles([]);
-        if (!isIrisRemoteModeEnabled()) setMessage(demoMessage);
+        setMessage(isIrisRemoteModeEnabled()
+          ? "Modo conectado registrado. Desbloqueie a sessão antes de consultar ou autorizar o Google Drive; nenhuma consulta foi enviada."
+          : demoMessage);
         return;
       }
-      if (retryAfterUnlock.current || !driveAuthorized) {
-        retryAfterUnlock.current = false;
-        void refresh();
-      }
+      setMessage("");
     };
     window.addEventListener("iris-access-changed", onAccessChanged);
     window.addEventListener("iris-mode-changed", onAccessChanged);
@@ -103,18 +101,34 @@ export default function GoogleWorkspace() {
       window.removeEventListener("iris-access-changed", onAccessChanged);
       window.removeEventListener("iris-mode-changed", onAccessChanged);
     };
-  }, [driveAuthorized, refresh]);
+  }, []);
 
   const connectGoogle = async () => {
-    if (!isIrisRemoteModeEnabled() || !isIrisAccessUnlocked()) {
-      setMessage("Desbloqueie o acesso remoto antes de conectar o Google Drive. Nenhuma solicitação foi enviada.");
+    setMessage("");
+    if (!isIrisRemoteModeEnabled()) {
+      setMessage(`${demoMessage} Para prosseguir, escolha o modo conectado em Configurações.`);
       return;
     }
-    setMessage("");
+    setAuthorizing(true);
     try {
+      if (!isIrisAccessUnlocked()) await restoreIrisAccess();
+      if (!isIrisRemoteModeEnabled() || !isIrisAccessUnlocked()) {
+        setRemoteAccessReady(false);
+        setMessage("A sessão não foi restaurada. Nenhuma solicitação OAuth foi enviada; desbloqueie o acesso no painel abaixo e clique em Autorizar Drive novamente.");
+        return;
+      }
+      setRemoteAccessReady(true);
+      await refresh(false);
+      if (!isIrisRemoteModeEnabled() || !isIrisAccessUnlocked()) {
+        setRemoteAccessReady(false);
+        setMessage("A sessão mudou antes da autorização. Nenhuma solicitação OAuth foi enviada.");
+        return;
+      }
       await startGoogleOAuth("drive");
     } catch (error) {
       setMessage(messageFor(error, "Não foi possível iniciar a autorização Google."));
+    } finally {
+      setAuthorizing(false);
     }
   };
 
@@ -164,8 +178,8 @@ export default function GoogleWorkspace() {
             <strong id="google-drive-heading"><FolderOpen size={16} /> Google Drive</strong>
             {driveAuthorized
               ? <span className="iris-pwa-safe">Autorizado</span>
-              : <Button onClick={() => void connectGoogle()} disabled={!remoteAccessReady}>Autorizar Drive</Button>}
-            <Button variant="outline" onClick={() => void refresh()} disabled={loading || creatingFolder || !remoteAccessReady}>
+              : <Button onClick={() => void connectGoogle()} disabled={authorizing || loading || creatingFolder}>{authorizing ? "Preparando autorização…" : "Autorizar Drive"}</Button>}
+            <Button variant="outline" onClick={() => void refresh(true)} disabled={loading || authorizing || creatingFolder}>
               <RefreshCw size={15} className={loading ? "animate-spin" : ""} /> Atualizar
             </Button>
           </div>
@@ -184,6 +198,8 @@ export default function GoogleWorkspace() {
             ))}
           </>}
         </section>
+
+        {!remoteAccessReady && <RemoteServiceAccess onReady={() => { void refresh(false); }} />}
 
         <p style={{ marginTop: 16 }}>
           A agenda fica no botão <Link href="/?view=agenda">Agenda</Link> da tela inicial.

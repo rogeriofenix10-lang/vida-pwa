@@ -9,12 +9,14 @@ import {
   ScanText,
   Search,
   ShieldCheck,
+  Trash2,
   Upload,
 } from "lucide-react";
 import { Link } from "wouter";
 import { readLocal, writeLocal, downloadBlob, assertLocalFileSize } from "@/lib/irisLocalStore";
 import { downloadIrisFile } from "@/lib/irisWorker";
 import { readDocumentText, type DocumentReadResult } from "@/lib/localOcr";
+import { deleteDocumentFromLatest, updateExistingDocument } from "@/lib/documentDeletion";
 import { redactFinancialIdentifiers } from "@shared/cardStatement";
 import {
   classifyDocument,
@@ -143,9 +145,11 @@ export default function DocumentVault() {
 
   // Updates replace only the explicitly edited record; no load-time migration or finance writes.
   const persistDocument = async (document: DocumentRecord) => {
-    const latest = await readLocal<DocumentRecord[]>("irisDocuments", items);
-    const next = [document, ...latest.filter((item) => item.id !== document.id)];
-    await writeLocal("irisDocuments", next);
+    const next = await updateExistingDocument(
+      document,
+      () => readLocal<DocumentRecord[]>("irisDocuments", []),
+      (records) => writeLocal("irisDocuments", records),
+    );
     setItems(next);
     return next;
   };
@@ -312,6 +316,41 @@ export default function DocumentVault() {
     );
     await writeLocal("irisDocuments", next);
     setItems(next);
+  };
+
+  const deleteDocument = async (item: DocumentRecord) => {
+    if (item.processing || ocrId === item.id) {
+      setMessage(`A exclusão de ${item.name} fica bloqueada enquanto a leitura local estiver em andamento.`);
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Excluir “${item.name}” deste dispositivo?\n\nEsta ação remove somente a cópia local deste documento. Não apaga lançamentos de Finanças nem o arquivo remoto (se houver), e não altera os outros documentos. Esta ação não pode ser desfeita.`,
+    );
+    if (!confirmed) return;
+
+    try {
+      const result = await deleteDocumentFromLatest(
+        item.id,
+        confirmed,
+        () => readLocal<DocumentRecord[]>("irisDocuments", []),
+        (records) => writeLocal("irisDocuments", records),
+      );
+      if (result.status === "cancelled") return;
+
+      setItems(result.records);
+      if (result.status === "deleted") {
+        setMessage(`A cópia local de “${item.name}” foi removida. Lançamentos de Finanças e arquivos remotos não foram alterados.`);
+      } else if (result.status === "processing") {
+        setMessage(`Não foi possível excluir “${item.name}”: a leitura local está em andamento.`);
+      } else {
+        setMessage(`“${item.name}” não está mais no arquivo local; a lista foi atualizada.`);
+      }
+    } catch (error) {
+      setMessage(
+        `Não foi possível excluir “${item.name}”; os dados locais foram preservados.${error instanceof Error ? ` ${safeStoredText(error.message, 300)}` : ""}`,
+      );
+    }
   };
 
   const runOcr = async (item: DocumentRecord) => {
@@ -582,6 +621,16 @@ export default function DocumentVault() {
                         <Download size={14} /> Baixar arquivo original
                       </button>
                     )}
+                    <button
+                      className="document-delete"
+                      type="button"
+                      onClick={() => void deleteDocument(item)}
+                      disabled={Boolean(item.processing) || ocrId === item.id}
+                      aria-label={`Excluir documento ${item.name}`}
+                      title="Excluir somente a cópia deste dispositivo"
+                    >
+                      <Trash2 size={14} /> Excluir
+                    </button>
                   </div>
                 </article>
               );

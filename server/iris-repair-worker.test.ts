@@ -192,9 +192,15 @@ describe("Iris Worker security repair", () => {
     const kv = memoryKV({
       "session:calendar": JSON.stringify({ access_token: "fictional-access-token", refresh_token: "fictional-refresh-token", expires_at: Date.now() + 3600000 }),
     });
-    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ id: "event-42", summary: "Atualizado" }), {
-      status: 200, headers: { "Content-Type": "application/json" },
-    }));
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      const payload = url.includes("/calendarList/")
+        ? { id: "primary", summary: "Principal", accessRole: "writer" }
+        : { id: "event-42", summary: "Atualizado" };
+      return new Response(JSON.stringify(payload), {
+        status: 200, headers: { "Content-Type": "application/json" },
+      });
+    });
     vi.stubGlobal("fetch", fetchMock);
     const env = { IRIS_ACCESS_SECRET: testSecret, IRIS_GMAIL_OAUTH: kv };
     const { body } = await login(env);
@@ -204,9 +210,69 @@ describe("Iris Worker security repair", () => {
       body: JSON.stringify({ summary: "Atualizado" }),
     }), env);
     expect(response.status).toBe(200);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(String(fetchMock.mock.calls[0][0])).toBe("https://www.googleapis.com/calendar/v3/users/me/calendarList/primary?fields=id,summary,accessRole");
+    expect(String(fetchMock.mock.calls[1][0])).toBe("https://www.googleapis.com/calendar/v3/calendars/primary/events/event-42");
+    expect(fetchMock.mock.calls[1][1]?.method).toBe("PATCH");
+  });
+
+  it("rejects reversed Calendar windows and annotates read results with their calendar identity and role", async () => {
+    const kv = memoryKV({
+      "session:calendar": JSON.stringify({ access_token: "fictional-access-token", refresh_token: "fictional-refresh-token", expires_at: Date.now() + 3600000 }),
+    });
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ items: [{ id: "same-event-id", summary: "Reunião", start: { dateTime: "2026-11-15T12:00:00Z" }, attendees: [{ email: "convidado@example.test" }], organizer: { email: "organizador@example.test" } }] }), {
+      status: 200, headers: { "Content-Type": "application/json" },
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+    const env = { IRIS_ACCESS_SECRET: testSecret, IRIS_GMAIL_OAUTH: kv };
+    const { body } = await login(env);
+
+    const invalid = await worker.fetch(new Request("https://worker.test/google/calendar/events?calendarId=team%40group.calendar.google.com&timeMin=2026-11-16T00%3A00%3A00Z&timeMax=2026-11-15T00%3A00%3A00Z", {
+      headers: authHeaders(body.token),
+    }), env);
+    expect(invalid.status).toBe(400);
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    const response = await worker.fetch(new Request("https://worker.test/google/calendar/events?calendarId=team%40group.calendar.google.com&calendarName=Equipe&accessRole=reader&timeMin=2026-11-15T00%3A00%3A00Z&timeMax=2026-11-16T00%3A00%3A00Z", {
+      headers: authHeaders(body.token),
+    }), env);
+    expect(response.status).toBe(200);
+    const payload = await response.json();
+    expect(payload.items[0]).toMatchObject({
+      id: "same-event-id",
+      calendarId: "team@group.calendar.google.com",
+      calendarName: "Equipe",
+      accessRole: "reader",
+      identity: "team@group.calendar.google.com:same-event-id",
+    });
+    expect(payload.items[0]).not.toHaveProperty("attendees");
+    expect(payload.items[0]).not.toHaveProperty("organizer");
+    expect(String(fetchMock.mock.calls[0][0])).toContain("calendar/v3/calendars/team%40group.calendar.google.com/events");
+    expect(new URL(String(fetchMock.mock.calls[0][0])).searchParams.get("fields")).toContain("items(id,summary,description,location,start(");
+  });
+
+  it("does not write Calendar events if the Google API cannot verify owner or writer permission", async () => {
+    const kv = memoryKV({
+      "session:calendar": JSON.stringify({ access_token: "fictional-access-token", refresh_token: "fictional-refresh-token", expires_at: Date.now() + 3600000 }),
+    });
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      return url.includes("/calendarList/")
+        ? new Response(JSON.stringify({ error: { message: "permission denied" } }), { status: 403, headers: { "Content-Type": "application/json" } })
+        : new Response(JSON.stringify({ id: "event-42" }), { status: 200, headers: { "Content-Type": "application/json" } });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const env = { IRIS_ACCESS_SECRET: testSecret, IRIS_GMAIL_OAUTH: kv };
+    const { body } = await login(env);
+    const response = await worker.fetch(new Request("https://worker.test/google/calendar/events/event-42?calendarId=team%40group.calendar.google.com", {
+      method: "PATCH",
+      headers: { ...authHeaders(body.token, { "X-Iris-Confirm": "true" }), "Content-Type": "application/json" },
+      body: JSON.stringify({ summary: "Teste confirmado" }),
+    }), env);
+    expect(response.status).toBe(403);
+    expect((await response.json()).error).toContain("nenhuma alteração foi enviada");
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(String(fetchMock.mock.calls[0][0])).toBe("https://www.googleapis.com/calendar/v3/calendars/primary/events/event-42");
-    expect(fetchMock.mock.calls[0][1]?.method).toBe("PATCH");
+    expect(String(fetchMock.mock.calls[0][0])).toContain("calendarList/team%40group.calendar.google.com");
   });
 
   it("requires auth for OAuth start and rejects invalid or replayed callback state", async () => {

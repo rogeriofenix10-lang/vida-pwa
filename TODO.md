@@ -15,7 +15,7 @@
 - [x] Ligar os clientes Pages às rotas D1 sem usar `/api/trpc`.
 - [x] Publicar no Worker de produção as rotas D1 e os modos avançados com autenticação, CORS restrito, bindings preservados e quota de armazenamento que não zera a cada mês.
 - [x] Expandir o código do Worker para visão, tradução, comparação documental e geração estruturada.
-- [ ] Preparar Drive e Calendar com escopos OAuth e aprovação para escrita; a conexão Google ainda pode exigir consentimento/reconexão do usuário.
+- [x] Preparar Drive e Calendar com escopos OAuth e aprovação explícita para escrita; a conexão Google ainda pode exigir consentimento/reconexão do usuário.
 - [ ] Manter redes sociais, Outlook, Waze e reservas bloqueados até credenciais próprias.
 
 # Reparos solicitados — importação, agenda e utilidades (11/11/2026)
@@ -59,3 +59,12 @@
 - [x] **Documentos e contratos sem gestão financeira duplicada:** manter armazenamento local, busca, revisão, OCR/leitura para documentos não financeiros e download dos originais; adicionar filtro de contratos; retirar a aba Gastos e o resumo financeiro. Somente FinanceHub importa faturas e cria/gerencia lançamentos. Faturas antigas continuam arquivadas, sem exclusão ou alteração automática, e podem ser encaminhadas a Finanças.
 - [x] **Auditoria de navegação:** conferir que nenhum menu/componente ativo volta a exibir o mesmo ícone ou função em vários lugares, preservando rotas antigas que possam estar salvas nos favoritos.
 - [x] **Duplicidades secundárias:** deixar `/offline` como Notas; preservar tarefas antigas dessa coleção em consulta, sem migrar/apagar IDs ou manter um segundo CRUD de tarefas. Calendar tem consulta, criação, edição e exclusão na Agenda; `/google` fica apenas com Drive, mantendo OAuth/consentimento e confirmação de escritas.
+
+# Uploads, catálogo PDF, clientes e Agenda (15/11/2026 — rodada seguinte)
+- [x] **Catálogo e arquivos do PC:** importar imagens e catálogos diretamente por upload do computador, não apenas Drive; baixar o catálogo de produtos em PDF e continuar exportações JSON/CSV, além de baixar os arquivos originais importados em seus formatos. Não enviar arquivos automaticamente nem apagar produtos existentes.
+- [x] **Tradução disponível e acesso claro:** diagnosticar a falha, permitir traduzir texto digitado/colado após clique, com resultado real, erro/limitação claro e caminho de ativação/sessão ou alternativa manual quando necessário. Nada é enviado durante digitação/ditado; não ativar serviços nem conectar automaticamente. A tradução local pode solicitar, com ação explícita, o download de um modelo do navegador; o fallback remoto exige serviço ativado, sessão desbloqueada e clique em Traduzir.
+- [x] **Importação de clientes:** importar PDF e outros formatos suportados do computador e montar relação cliente por cliente com todos os campos legíveis disponíveis; preservar original e campos adicionais, indicar dados ausentes ou ambíguos e permitir revisão antes de salvar sem inventar informações. Manter cadastros existentes e evitar duplicações por reimportação.
+- [x] **Consulta da carteira:** verificar e filtrar clientes por nome, grupo econômico, cidade e estado; abrir dados individuais completos e baixar/exportar a relação filtrada, sem depender de Drive.
+- [x] **Agenda completa e calendário:** puxar compromissos Google por paginação sem corte silencioso; incluir botão para calendário mensal e acesso à lista/agenda, com período selecionável e origem das agendas. Perguntas à Iris sobre agenda devem responder com dados reais e filtros de datas, não informações inventadas. Escritas exigem confirmação e permissão da agenda correta. Agendas/páginas sem acesso são identificadas como resultado parcial; convites e emails de participantes não são devolvidos à aplicação.
+- [x] **Google e Agenda desbloqueáveis:** oferecer caminho acionável de ativação/sessão lembrada por dispositivo e OAuth Google; não deixar apenas botões inativos sem solução. Não retirar autenticação, não abrir OAuth nem enviar dados automaticamente.
+- [x] **Apagar documentos e contratos:** oferecer exclusão manual confirmada do documento escolhido deste dispositivo, esclarecendo o escopo; preservar todos os demais arquivos, lançamentos financeiros e históricos. Não excluir objetos remotos silenciosamente.

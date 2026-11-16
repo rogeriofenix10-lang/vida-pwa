@@ -312,6 +312,37 @@ async function googleApi(req, env, product, path, init = {}) {
   const data = await r.json().catch(() => ({}));
   return json(data, r.status, req.headers.get("Origin"), env.ALLOWED_ORIGIN);
 }
+function validCalendarId(value) {
+  return typeof value === "string" && value.length > 0 && value.length <= 256 && !/[\u0000-\u001f\u007f]/.test(value);
+}
+function calendarRole(value) {
+  return ["owner", "writer", "reader", "freeBusyReader"].includes(value) ? value : "unknown";
+}
+function boundedCalendarPageSize(value, fallback, maximum) {
+  if (value === null) return fallback;
+  if (!/^\d+$/.test(value)) return null;
+  const parsed = Number(value);
+  if (!Number.isSafeInteger(parsed) || parsed < 1) return null;
+  return Math.min(parsed, maximum);
+}
+async function calendarWritePermission(req, env, calendarId) {
+  const origin = req.headers.get("Origin"), allowed = env.ALLOWED_ORIGIN;
+  const token = await googleToken(req, env, "calendar");
+  if (!token) return json({ error: "Google Calendar não autorizado. Abra POST /oauth/start." }, 401, origin, allowed);
+  const resource = `calendar/v3/users/me/calendarList/${encodeURIComponent(calendarId)}`;
+  const response = await fetch(`https://www.googleapis.com/${resource}?fields=id,summary,accessRole`, {
+    headers: { Authorization: `Bearer ${token.access_token}` },
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) return json({ error: response.status === 403
+    ? "Não foi possível confirmar a permissão de escrita desta agenda; nenhuma alteração foi enviada."
+    : data?.error?.message || "Não foi possível verificar a permissão da agenda." }, response.status, origin, allowed);
+  const role = calendarRole(data?.accessRole);
+  if (role !== "owner" && role !== "writer") {
+    return json({ error: "Esta agenda é somente leitura para a conta Google atual; nenhuma alteração foi enviada.", accessRole: role }, 403, origin, allowed);
+  }
+  return null;
+}
 async function googleWrite(req, env, product, path, method, body) {
   if (req.headers.get("X-Iris-Confirm") !== "true") return json({ error: "CONFIRMATION_REQUIRED", product, method, path }, 409, req.headers.get("Origin"), env.ALLOWED_ORIGIN);
   return googleApi(req, env, product, path, { method, headers: { "Content-Type": "application/json" }, body: body === undefined ? undefined : JSON.stringify(body) });
@@ -614,27 +645,105 @@ async function handle(req, env) {
     const parsed = await readJson(req); if (!parsed.ok) return readJsonError(parsed, origin, allowed); const body = parsed.value;
     return googleWrite(req, env, "drive", `drive/v3/files/${encodeURIComponent(driveCopy[1])}/copy`, "POST", { name: String(body.name || "Cópia").slice(0, 180), parents: Array.isArray(body.parents) ? body.parents : undefined });
   }
+  if (path === "/google/calendar/calendars") {
+    if (req.method !== "GET") return json({ error: "Use GET." }, 405, origin, allowed);
+    const maxResults = boundedCalendarPageSize(url.searchParams.get("maxResults"), 250, 250);
+    const pageToken = url.searchParams.get("pageToken");
+    if (maxResults === null || (pageToken && pageToken.length > 2048)) return json({ error: "Parâmetros de paginação de calendários inválidos." }, 400, origin, allowed);
+    const params = new URLSearchParams({
+      maxResults: String(maxResults),
+      fields: "items(id,summary,primary,accessRole,backgroundColor,timeZone),nextPageToken",
+      ...(pageToken ? { pageToken } : {}),
+    });
+    const response = await googleApi(req, env, "calendar", `calendar/v3/users/me/calendarList?${params}`);
+    if (response.status === 403) {
+      return json({
+        items: [],
+        calendarListUnavailable: true,
+        warning: "A conta não autorizou a leitura da lista de calendários; foi usada somente a agenda principal. Reconecte o Google Calendar se quiser consultar outras agendas.",
+      }, 200, origin, allowed);
+    }
+    return response;
+  }
   if (path === "/google/calendar/events") {
     if (req.method === "GET") {
-      const params = new URLSearchParams({ calendarId: "primary", singleEvents: "true", orderBy: "startTime", maxResults: "100", timeMin: url.searchParams.get("timeMin") || new Date().toISOString(), ...(url.searchParams.get("timeMax") ? { timeMax: url.searchParams.get("timeMax") } : {}) });
-      return googleApi(req, env, "calendar", `calendar/v3/calendars/primary/events?${params}`);
+      const calendarId = url.searchParams.get("calendarId") || "primary";
+      const timeMin = url.searchParams.get("timeMin") || new Date().toISOString();
+      const timeMax = url.searchParams.get("timeMax") || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+      const maxResults = boundedCalendarPageSize(url.searchParams.get("maxResults"), 2500, 2500);
+      const pageToken = url.searchParams.get("pageToken");
+      if (!validCalendarId(calendarId) || maxResults === null || (pageToken && pageToken.length > 2048) || !Number.isFinite(Date.parse(timeMin)) || !Number.isFinite(Date.parse(timeMax)) || Date.parse(timeMax) <= Date.parse(timeMin)) {
+        return json({ error: "Informe agenda, período delimitado e paginação válidos." }, 400, origin, allowed);
+      }
+      const params = new URLSearchParams({
+        singleEvents: "true",
+        orderBy: "startTime",
+        maxResults: String(maxResults),
+        timeMin,
+        timeMax,
+        fields: "items(id,summary,description,location,start(date,dateTime,timeZone),end(date,dateTime,timeZone),recurrence,originalStartTime(date,dateTime,timeZone),htmlLink),nextPageToken",
+      });
+      if (pageToken) params.set("pageToken", pageToken);
+      const response = await googleApi(req, env, "calendar", `calendar/v3/calendars/${encodeURIComponent(calendarId)}/events?${params}`);
+      if (!response.ok) return response;
+      const data = await response.json().catch(() => ({}));
+      const calendarName = String(url.searchParams.get("calendarName") || calendarId).slice(0, 256);
+      const accessRole = calendarRole(url.searchParams.get("accessRole"));
+      const eventDate = (value) => value && typeof value === "object" ? {
+        ...(typeof value.date === "string" ? { date: value.date } : {}),
+        ...(typeof value.dateTime === "string" ? { dateTime: value.dateTime } : {}),
+        ...(typeof value.timeZone === "string" ? { timeZone: value.timeZone } : {}),
+      } : undefined;
+      const items = Array.isArray(data?.items) ? data.items.filter((event) => event && typeof event.id === "string").map((event) => ({
+        id: event.id,
+        ...(typeof event.summary === "string" ? { summary: event.summary } : {}),
+        ...(typeof event.description === "string" ? { description: event.description } : {}),
+        ...(typeof event.location === "string" ? { location: event.location } : {}),
+        ...(eventDate(event.start) ? { start: eventDate(event.start) } : {}),
+        ...(eventDate(event.end) ? { end: eventDate(event.end) } : {}),
+        ...(Array.isArray(event.recurrence) ? { recurrence: event.recurrence.filter((rule) => typeof rule === "string").slice(0, 10) } : {}),
+        ...(eventDate(event.originalStartTime) ? { originalStartTime: eventDate(event.originalStartTime) } : {}),
+        ...(typeof event.htmlLink === "string" ? { htmlLink: event.htmlLink } : {}),
+        calendarId,
+        calendarName,
+        accessRole,
+        identity: `${calendarId}:${event.id}`,
+      })) : [];
+      return json({ ...data, items }, 200, origin, allowed);
     }
     if (req.method !== "POST") return json({ error: "Use GET ou POST." }, 405, origin, allowed);
+    const calendarId = url.searchParams.get("calendarId") || "primary";
+    const apiPath = `calendar/v3/calendars/${encodeURIComponent(calendarId)}/events`;
+    if (!validCalendarId(calendarId)) return json({ error: "Agenda inválida." }, 400, origin, allowed);
+    if (req.headers.get("X-Iris-Confirm") !== "true") return googleWrite(req, env, "calendar", apiPath, "POST", undefined);
     const parsed = await readJson(req); if (!parsed.ok) return readJsonError(parsed, origin, allowed); const body = parsed.value;
     const interval = calendarInterval(body.start, body.end);
     if (!interval || (body.allDay && (!interval.start.date || !interval.end.date))) return json({ error: "Datas do compromisso inválidas; o término precisa ser posterior ao início." }, 400, origin, allowed);
     if (body.recurrence !== undefined && (!Array.isArray(body.recurrence) || body.recurrence.length > 10 || body.recurrence.some((item) => typeof item !== "string" || item.length > 256))) return json({ error: "Recorrência inválida." }, 400, origin, allowed);
-    return googleWrite(req, env, "calendar", "calendar/v3/calendars/primary/events", "POST", { summary: String(body.summary || body.title || "Compromisso").slice(0, 180), description: String(body.description || "").slice(0, 4000), location: String(body.location || "").slice(0, 300), ...interval, recurrence: body.recurrence });
+    const denied = await calendarWritePermission(req, env, calendarId);
+    if (denied) return denied;
+    return googleWrite(req, env, "calendar", apiPath, "POST", { summary: String(body.summary || body.title || "Compromisso").slice(0, 180), description: String(body.description || "").slice(0, 4000), location: String(body.location || "").slice(0, 300), ...interval, recurrence: body.recurrence });
   }
   const calendarEvent = path.match(/^\/google\/calendar\/events\/([^/]+)$/);
   if (calendarEvent) {
     if (req.method !== "PATCH" && req.method !== "DELETE") return json({ error: "Use PATCH ou DELETE." }, 405, origin, allowed);
-    const apiPath = `calendar/v3/calendars/primary/events/${encodeURIComponent(calendarEvent[1])}`;
-    if (req.method === "DELETE") return googleWrite(req, env, "calendar", apiPath, "DELETE", undefined);
+    const calendarId = url.searchParams.get("calendarId") || "primary";
+    if (!validCalendarId(calendarId)) return json({ error: "Agenda inválida." }, 400, origin, allowed);
+    let eventId;
+    try { eventId = decodeURIComponent(calendarEvent[1]); } catch { return json({ error: "Identificador do evento inválido." }, 400, origin, allowed); }
+    const apiPath = `calendar/v3/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(eventId)}`;
+    if (req.method === "DELETE") {
+      if (req.headers.get("X-Iris-Confirm") !== "true") return googleWrite(req, env, "calendar", apiPath, "DELETE", undefined);
+      const denied = await calendarWritePermission(req, env, calendarId);
+      if (denied) return denied;
+      return googleWrite(req, env, "calendar", apiPath, "DELETE", undefined);
+    }
     if (req.headers.get("X-Iris-Confirm") !== "true") return json({ error: "CONFIRMATION_REQUIRED", product: "calendar", method: "PATCH", path: apiPath }, 409, origin, allowed);
     const parsed = await readJson(req); if (!parsed.ok) return readJsonError(parsed, origin, allowed);
     const patch = calendarPatch(parsed.value);
     if (!patch) return json({ error: "Campos do compromisso inválidos ou não permitidos." }, 400, origin, allowed);
+    const denied = await calendarWritePermission(req, env, calendarId);
+    if (denied) return denied;
     return googleWrite(req, env, "calendar", apiPath, "PATCH", patch);
   }
   if (path === "/db/health") { if (req.method !== "GET") return json({ error: "Use GET." }, 405, origin, allowed); return json({ ok: !!env.IRIS_DB, database: env.IRIS_DB ? "d1" : "missing" }, env.IRIS_DB ? 200 : 503, origin, allowed); }

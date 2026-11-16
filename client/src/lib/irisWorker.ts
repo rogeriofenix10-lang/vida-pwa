@@ -7,6 +7,11 @@ import {
   type IrisDeviceAuthSnapshot,
   type IrisDeviceCredential,
 } from "./irisDeviceStore";
+import {
+  attachCalendarIdentity,
+  type GoogleCalendarEvent,
+  type GoogleCalendarInfo,
+} from "./calendar";
 
 const DEFAULT_WORKER_URL = "https://iris-gemini-proxy.rogeriofenix10.workers.dev";
 const MAX_REMOTE_PASSWORD_LENGTH = 256;
@@ -883,45 +888,226 @@ export function googleDriveCopy(id: string, name: string, confirm = false) {
   });
 }
 
+export type { GoogleCalendarEvent, GoogleCalendarInfo } from "./calendar";
+
+export type GoogleCalendarListResult = {
+  items: GoogleCalendarInfo[];
+  warning?: string;
+  truncated: boolean;
+  listAvailable: boolean;
+};
+
+export type GoogleCalendarEventsQuery = {
+  timeMin: string;
+  timeMax: string;
+  calendarId?: string;
+  calendars?: GoogleCalendarInfo[];
+};
+
+export type GoogleCalendarEventsResult = {
+  items: GoogleCalendarEvent[];
+  calendars: GoogleCalendarInfo[];
+  calendarsQueried: GoogleCalendarInfo[];
+  warnings: string[];
+  truncated: boolean;
+  pages: number;
+};
+
+const CALENDAR_LIST_PAGE_SIZE = 250;
+const CALENDAR_LIST_PAGE_LIMIT = 10;
+const CALENDAR_EVENT_PAGE_SIZE = 2500;
+const CALENDAR_EVENT_PAGE_LIMIT = 40;
+const CALENDAR_EVENT_ITEM_LIMIT = 25_000;
+
+function primaryCalendarFallback(warning: string): GoogleCalendarListResult {
+  return {
+    items: [{ id: "primary", summary: "Agenda principal", primary: true, accessRole: "unknown" }],
+    warning,
+    truncated: false,
+    listAvailable: false,
+  };
+}
+
+function isCalendarAccessRole(value: unknown): value is GoogleCalendarInfo["accessRole"] {
+  return value === "owner" || value === "writer" || value === "reader" || value === "freeBusyReader";
+}
+
 export function googleCalendarStatus() {
   return request<{ authorized: boolean }>("/google/calendar/status");
 }
 
-export type GoogleCalendarEvent = {
-  id: string;
-  summary?: string;
-  description?: string;
-  location?: string;
-  start?: { date?: string; dateTime?: string };
-  end?: { date?: string; dateTime?: string };
-  recurrence?: string[];
-};
+export async function googleCalendarCalendars(): Promise<GoogleCalendarListResult> {
+  const items: GoogleCalendarInfo[] = [];
+  const seen = new Set<string>();
+  let pageToken: string | undefined;
+  let truncated = false;
+  for (let pageIndex = 0; pageIndex < CALENDAR_LIST_PAGE_LIMIT; pageIndex += 1) {
+    const params = new URLSearchParams({ maxResults: String(CALENDAR_LIST_PAGE_SIZE) });
+    if (pageToken) params.set("pageToken", pageToken);
+    const page = await request<{
+      items?: Array<Record<string, unknown>>;
+      nextPageToken?: string;
+      calendarListUnavailable?: boolean;
+      warning?: string;
+    }>(`/google/calendar/calendars?${params.toString()}`);
 
-export function googleCalendarEvents(timeMin?: string, timeMax?: string) {
-  const params = new URLSearchParams();
-  if (timeMin) params.set("timeMin", timeMin);
-  if (timeMax) params.set("timeMax", timeMax);
-  return request<{ items?: GoogleCalendarEvent[] }>(`/google/calendar/events?${params.toString()}`);
+    if (page.calendarListUnavailable) {
+      return primaryCalendarFallback(page.warning || "A lista de calendários não está disponível; foi consultada somente a agenda principal.");
+    }
+    for (const value of page.items ?? []) {
+      if (typeof value?.id !== "string" || !value.id || seen.has(value.id)) continue;
+      seen.add(value.id);
+      items.push({
+        id: value.id,
+        summary: typeof value.summary === "string" && value.summary.trim() ? value.summary : "Agenda sem nome",
+        primary: value.primary === true,
+        accessRole: isCalendarAccessRole(value.accessRole) ? value.accessRole : "unknown",
+        ...(typeof value.backgroundColor === "string" ? { backgroundColor: value.backgroundColor } : {}),
+        ...(typeof value.timeZone === "string" ? { timeZone: value.timeZone } : {}),
+      });
+    }
+    pageToken = typeof page.nextPageToken === "string" && page.nextPageToken ? page.nextPageToken : undefined;
+    if (!pageToken) break;
+    if (pageIndex === CALENDAR_LIST_PAGE_LIMIT - 1) truncated = true;
+  }
+
+  items.sort((left, right) => Number(right.primary) - Number(left.primary) || left.summary.localeCompare(right.summary, "pt-BR"));
+  if (!items.some((calendar) => calendar.primary || calendar.id === "primary")) {
+    items.unshift({ id: "primary", summary: "Agenda principal", primary: true, accessRole: "unknown" });
+  }
+  if (!items.length) {
+    return primaryCalendarFallback("O Google não informou calendários acessíveis; foi consultada somente a agenda principal.");
+  }
+  return {
+    items,
+    ...(truncated ? { warning: `A lista de calendários excedeu ${CALENDAR_LIST_PAGE_LIMIT * CALENDAR_LIST_PAGE_SIZE} itens; algumas agendas podem não ter sido incluídas.` } : {}),
+    truncated,
+    listAvailable: true,
+  };
 }
 
-export function googleCalendarCreate(event: Record<string, unknown>, confirm = false) {
-  return request<GoogleCalendarEvent>("/google/calendar/events", {
+function defaultCalendarQuery(): GoogleCalendarEventsQuery {
+  const now = new Date();
+  return {
+    timeMin: now.toISOString(),
+    timeMax: new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+  };
+}
+
+export async function googleCalendarEvents(
+  queryOrTimeMin: GoogleCalendarEventsQuery | string = defaultCalendarQuery(),
+  legacyTimeMax?: string,
+): Promise<GoogleCalendarEventsResult> {
+  const query: GoogleCalendarEventsQuery = typeof queryOrTimeMin === "string"
+    ? { timeMin: queryOrTimeMin, timeMax: legacyTimeMax || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString() }
+    : queryOrTimeMin;
+  if (!query.timeMin || !query.timeMax || !Number.isFinite(Date.parse(query.timeMin)) || !Number.isFinite(Date.parse(query.timeMax)) || Date.parse(query.timeMax) <= Date.parse(query.timeMin)) {
+    throw new Error("Informe um período válido e delimitado para consultar o Google Calendar.");
+  }
+
+  const calendarResult: GoogleCalendarListResult = query.calendars
+    ? { items: query.calendars, truncated: false, listAvailable: true }
+    : await googleCalendarCalendars();
+  const calendars = calendarResult.items;
+  const selectedCalendars = query.calendarId
+    ? calendars.filter((calendar) => calendar.id === query.calendarId)
+    : calendars;
+  const warnings = calendarResult.warning ? [calendarResult.warning] : [];
+  if (!selectedCalendars.length) {
+    return {
+      items: [], calendars, calendarsQueried: [], warnings: [`A agenda selecionada (${query.calendarId}) não está na lista acessível atual.`],
+      truncated: calendarResult.truncated, pages: 0,
+    };
+  }
+
+  const items: GoogleCalendarEvent[] = [];
+  const seenEvents = new Set<string>();
+  const calendarsQueried: GoogleCalendarInfo[] = [];
+  let pages = 0;
+  let truncated = calendarResult.truncated;
+  for (let calendarIndex = 0; calendarIndex < selectedCalendars.length; calendarIndex += 1) {
+    const calendar = selectedCalendars[calendarIndex];
+    if (pages >= CALENDAR_EVENT_PAGE_LIMIT || items.length >= CALENDAR_EVENT_ITEM_LIMIT) {
+      truncated = true;
+      break;
+    }
+    let pageToken: string | undefined;
+    do {
+      if (pages >= CALENDAR_EVENT_PAGE_LIMIT || items.length >= CALENDAR_EVENT_ITEM_LIMIT) {
+        truncated = true;
+        break;
+      }
+      const params = new URLSearchParams({
+        calendarId: calendar.id,
+        calendarName: calendar.summary,
+        accessRole: calendar.accessRole,
+        timeMin: query.timeMin,
+        timeMax: query.timeMax,
+        maxResults: String(CALENDAR_EVENT_PAGE_SIZE),
+      });
+      if (pageToken) params.set("pageToken", pageToken);
+      let page: {
+        items?: Array<Omit<GoogleCalendarEvent, "calendarId" | "calendarName" | "accessRole" | "identity"> & Partial<GoogleCalendarEvent>>;
+        nextPageToken?: string;
+      };
+      pages += 1;
+      try {
+        page = await request<typeof page>(`/google/calendar/events?${params.toString()}`);
+      } catch (error) {
+        if (!isIrisRemoteModeEnabled() || !isIrisAccessUnlocked()) throw error;
+        warnings.push(`A agenda “${calendar.summary}” não pôde ser consultada por completo: ${error instanceof Error ? error.message : "acesso ou rede indisponível"}. Os resultados das outras agendas foram preservados.`);
+        truncated = true;
+        break;
+      }
+      if (!calendarsQueried.some((entry) => entry.id === calendar.id)) calendarsQueried.push(calendar);
+      for (const rawEvent of page.items ?? []) {
+        if (!rawEvent || typeof rawEvent.id !== "string" || !rawEvent.id) continue;
+        const event = attachCalendarIdentity(rawEvent, calendar);
+        if (seenEvents.has(event.identity)) continue;
+        seenEvents.add(event.identity);
+        items.push(event);
+        if (items.length >= CALENDAR_EVENT_ITEM_LIMIT) {
+          truncated = true;
+          break;
+        }
+      }
+      pageToken = typeof page.nextPageToken === "string" && page.nextPageToken ? page.nextPageToken : undefined;
+      if (pageToken && (pages >= CALENDAR_EVENT_PAGE_LIMIT || items.length >= CALENDAR_EVENT_ITEM_LIMIT)) truncated = true;
+    } while (pageToken);
+  }
+  if (calendarsQueried.length < selectedCalendars.length) truncated = true;
+  if (truncated) warnings.push(`O resultado é parcial: alguma agenda/página não foi concluída, ou foram atingidos os limites de ${CALENDAR_EVENT_PAGE_LIMIT} páginas ou ${CALENDAR_EVENT_ITEM_LIMIT} eventos. Ajuste o período ou selecione uma agenda para consultar o restante.`);
+  items.sort((left, right) => {
+    const leftStart = left.start?.dateTime ? Date.parse(left.start.dateTime) : left.start?.date ? Date.parse(`${left.start.date}T00:00:00Z`) : Number.MAX_SAFE_INTEGER;
+    const rightStart = right.start?.dateTime ? Date.parse(right.start.dateTime) : right.start?.date ? Date.parse(`${right.start.date}T00:00:00Z`) : Number.MAX_SAFE_INTEGER;
+    return leftStart - rightStart || left.calendarName.localeCompare(right.calendarName, "pt-BR");
+  });
+  return { items, calendars, calendarsQueried, warnings, truncated, pages };
+}
+
+function calendarWriteParams(calendarId: string) {
+  const params = new URLSearchParams({ calendarId: calendarId || "primary" });
+  return params.toString();
+}
+
+export function googleCalendarCreate(event: Record<string, unknown>, confirm = false, calendarId = "primary") {
+  return request<GoogleCalendarEvent>(`/google/calendar/events?${calendarWriteParams(calendarId)}`, {
     method: "POST",
     headers: { "X-Iris-Confirm": String(confirm) },
     body: JSON.stringify(event),
   });
 }
 
-export function googleCalendarUpdate(id: string, event: Record<string, unknown>, confirm = false) {
-  return request<GoogleCalendarEvent>(`/google/calendar/events/${encodeURIComponent(id)}`, {
+export function googleCalendarUpdate(id: string, event: Record<string, unknown>, confirm = false, calendarId = "primary") {
+  return request<GoogleCalendarEvent>(`/google/calendar/events/${encodeURIComponent(id)}?${calendarWriteParams(calendarId)}`, {
     method: "PATCH",
     headers: { "X-Iris-Confirm": String(confirm) },
     body: JSON.stringify(event),
   });
 }
 
-export function googleCalendarDelete(id: string, confirm = false) {
-  return request<{ ok?: boolean }>(`/google/calendar/events/${encodeURIComponent(id)}`, {
+export function googleCalendarDelete(id: string, confirm = false, calendarId = "primary") {
+  return request<{ ok?: boolean }>(`/google/calendar/events/${encodeURIComponent(id)}?${calendarWriteParams(calendarId)}`, {
     method: "DELETE",
     headers: { "X-Iris-Confirm": String(confirm) },
   });

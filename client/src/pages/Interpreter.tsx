@@ -11,8 +11,10 @@ import {
   VolumeX,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import RemoteServiceAccess from "@/components/RemoteServiceAccess";
 import { IRIS_STATIC_MODE } from "@/lib/irisRuntime";
-import { askIrisAdvanced } from "@/lib/irisWorker";
+import { askIrisAdvanced, isIrisAccessUnlocked, isIrisRemoteModeEnabled } from "@/lib/irisWorker";
+import { translateWithAvailableService } from "@/lib/translation";
 
 type Lang = "pt-BR" | "en-US" | "es-ES" | "fr-FR" | "de-DE" | "zh-CN" | "ja-JP";
 const MAX_TEXT_LENGTH = 12000;
@@ -60,9 +62,11 @@ export default function Interpreter() {
   const [heard, setHeard] = useState("");
   const [translated, setTranslated] = useState("");
   const [error, setError] = useState("");
+  const [downloadRequest, setDownloadRequest] = useState<{ text: string; source: Lang; target: Lang } | null>(null);
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
   const listeningRef = useRef(false);
   const pendingRef = useRef(false);
+  const translationSequenceRef = useRef(0);
   const voiceQueueRef = useRef<string[]>([]);
   const voiceTextRef = useRef("");
 
@@ -98,62 +102,89 @@ export default function Interpreter() {
     window.speechSynthesis.speak(utterance);
   };
 
-  const translateText = async (rawText: string, fromVoice = false) => {
+  const translateText = async (rawText: string, allowLocalDownload = false) => {
     const text = rawText.trim();
-    if (!text) return;
-    if (pendingRef.current) {
-      if (fromVoice) {
-        voiceQueueRef.current.push(text);
-        setStatus("Trecho de voz aguardando a tradução anterior");
-      }
+    if (!text || pendingRef.current) return;
+    if (!IRIS_STATIC_MODE && text.length > DYNAMIC_TEXT_LIMIT) {
+      setError(`No modo dinâmico, a tradução aceita até ${DYNAMIC_TEXT_LIMIT.toLocaleString("pt-BR")} caracteres. Reduza o texto e tente novamente.`);
+      setStatus("Texto acima do limite do modo dinâmico");
       return;
     }
 
+    const requestId = ++translationSequenceRef.current;
+    const requestIsCurrent = () => translationSequenceRef.current === requestId;
+    setDownloadRequest(null);
     pendingRef.current = true;
     setPending(true);
+    setTranslated("");
     setError("");
-    let nextText: string | undefined = text;
-    let lastRequestFailed = false;
+    setStatus(`Verificando tradução para ${targetLabel}…`);
 
     try {
-      while (nextText) {
-        const currentText = nextText;
-        nextText = undefined;
-        if (!IRIS_STATIC_MODE && currentText.length > DYNAMIC_TEXT_LIMIT) {
-          setError(
-            `No modo dinâmico, a tradução aceita até ${DYNAMIC_TEXT_LIMIT.toLocaleString("pt-BR")} caracteres. Reduza o texto e tente novamente.`,
-          );
-          setStatus("Texto acima do limite do modo dinâmico");
-          lastRequestFailed = true;
-        } else {
-          setError("");
-          setStatus(`Traduzindo para ${targetLabel}…`);
-          try {
-            const result = await askIrisAdvanced({
-              mode: "translate",
-              text: `Traduza de ${sourceLabel} (${source}) para ${targetLabel} (${target}). Retorne só tradução.\n${currentText}`,
-            });
-            const resultText = result.text?.trim() ?? "";
-            if (!resultText) throw new Error("O serviço retornou uma tradução vazia.");
-            setTranslated(resultText);
-            lastRequestFailed = false;
-            speak(resultText);
-          } catch (translationError) {
-            setError(
-              errorMessage(translationError, "Não foi possível traduzir agora."),
-            );
-            setStatus("Tradução indisponível");
-            lastRequestFailed = true;
-          }
-        }
-        nextText = voiceQueueRef.current.shift();
+      const outcome = await translateWithAvailableService({
+        text: rawText,
+        sourceLanguage: source.split("-")[0],
+        targetLanguage: target.split("-")[0],
+        remoteEnabled: isIrisRemoteModeEnabled(),
+        accessUnlocked: isIrisAccessUnlocked(),
+        allowLocalDownload,
+      }, {
+        isCurrent: requestIsCurrent,
+        remoteTranslate: async (request) => {
+          if (!requestIsCurrent()) throw new Error("O texto mudou antes do envio; clique em Traduzir novamente.");
+          if (!isIrisRemoteModeEnabled()) throw new Error("Modo Demonstração ativo: nenhum texto foi enviado. Se quiser, ative serviços remotos em Configurações.");
+          if (!isIrisAccessUnlocked()) throw new Error("Sessão remota bloqueada: nenhum texto foi enviado. Restaure ou desbloqueie o acesso e clique em Traduzir novamente.");
+          const result = await askIrisAdvanced({
+            mode: "translate",
+            text: `Traduza de ${sourceLabel} (${source}) para ${targetLabel} (${target}). Retorne só tradução.\n${request.text}`,
+          });
+          return result.text ?? "";
+        },
+      });
+
+      if (!requestIsCurrent() || outcome.status === "stale") return;
+      if (outcome.status === "translated") {
+        setTranslated(outcome.text);
+        setDownloadRequest(null);
+        setStatus(outcome.provider === "same-language"
+          ? "Os idiomas são iguais; o texto foi mantido localmente."
+          : outcome.provider === "browser"
+            ? "Tradução concluída no dispositivo."
+            : "Tradução remota concluída após seu clique.");
+        speak(outcome.text);
+      } else if (outcome.status === "download-required") {
+        setDownloadRequest({ text: rawText, source, target });
+        setStatus("O navegador oferece tradução local, mas o modelo ainda não está disponível.");
+        setError(outcome.remoteReason === "demo"
+          ? "Nada foi enviado. Autorize o download local abaixo ou ative serviços remotos em Configurações para usar o fallback."
+          : outcome.remoteReason === "locked"
+            ? "Nada foi enviado. Autorize o download local abaixo ou desbloqueie uma sessão remota para usar o fallback."
+            : "Nada foi baixado. Autorize explicitamente o preparo do modelo local abaixo.");
+      } else if (outcome.status === "downloading") {
+        setStatus("O modelo de tradução local já está sendo preparado pelo navegador.");
+        setError(outcome.remoteReason === "demo"
+          ? "Aguarde o navegador concluir. O modo Demonstração continua sem enviar texto à Iris."
+          : outcome.remoteReason === "locked"
+            ? "Aguarde o navegador concluir ou restaure/desbloqueie o acesso remoto para usar o fallback."
+            : "Aguarde o navegador concluir e tente novamente.");
+      } else {
+        setStatus("Tradução bloqueada ou indisponível");
+        setError(outcome.remoteReason === "demo"
+          ? "Este navegador não oferece um tradutor local pronto. No modo Demonstração nenhum texto foi enviado; ative o modo conectado em Configurações se quiser usar a IA."
+          : outcome.remoteReason === "locked"
+            ? "Este navegador não oferece um tradutor local pronto. A sessão remota está bloqueada; restaure o dispositivo ou desbloqueie com a senha master."
+            : outcome.detail
+              ? `O tradutor do navegador falhou: ${outcome.detail}`
+              : "Este navegador não oferece tradução local pronta e nenhum serviço remoto autorizado está disponível.");
       }
+    } catch (translationError) {
+      if (!requestIsCurrent()) return;
+      setStatus("Tradução indisponível");
+      setError(errorMessage(translationError, "Não foi possível traduzir agora."));
     } finally {
       pendingRef.current = false;
       setPending(false);
-      if (listeningRef.current) setStatus(`Ouvindo em ${sourceLabel}`);
-      else if (!window.speechSynthesis?.speaking)
-        setStatus(lastRequestFailed ? "Tradução indisponível" : "Tradução concluída");
+      if (requestIsCurrent() && listeningRef.current && !error) setStatus(`Ouvindo em ${sourceLabel}`);
     }
   };
 
@@ -169,6 +200,8 @@ export default function Interpreter() {
     setError("");
     setHeard("");
     setTranslated("");
+    setDownloadRequest(null);
+    translationSequenceRef.current += 1;
     voiceTextRef.current = "";
     voiceQueueRef.current = [];
 
@@ -192,7 +225,12 @@ export default function Interpreter() {
         return;
       }
       voiceTextRef.current = candidate;
+      translationSequenceRef.current += 1;
       setHeard(candidate);
+      setTranslated("");
+      setError("");
+      setDownloadRequest(null);
+      setStatus("Texto de voz atualizado; clique em Traduzir para enviar ou processar.");
     };
     recognition.onerror = (event) => {
       if (recognitionRef.current !== recognition) return;
@@ -248,15 +286,33 @@ export default function Interpreter() {
   };
 
   const clear = () => {
+    translationSequenceRef.current += 1;
     setHeard("");
     setTranslated("");
     setError("");
+    setDownloadRequest(null);
     voiceTextRef.current = "";
     voiceQueueRef.current = [];
     setStatus(listeningRef.current ? `Ouvindo em ${sourceLabel}` : "Campos limpos");
   };
 
+  const openManualTranslator = () => {
+    const text = heard.trim();
+    if (!text) return;
+    const confirmed = window.confirm(
+      `Abrir o Google Tradutor compartilhará este texto com o Google para tradução de ${sourceLabel} para ${targetLabel}. Nada será compartilhado se você cancelar. Deseja continuar?`,
+    );
+    if (!confirmed) return;
+    const url = new URL("https://translate.google.com/");
+    url.searchParams.set("sl", source.split("-")[0]);
+    url.searchParams.set("tl", target.split("-")[0]);
+    url.searchParams.set("text", text);
+    url.searchParams.set("op", "translate");
+    window.open(url.href, "_blank", "noopener,noreferrer");
+  };
+
   const swap = () => {
+    translationSequenceRef.current += 1;
     setSource(target);
     setTarget(source);
     clear();
@@ -282,14 +338,14 @@ export default function Interpreter() {
           <div className="language-row">
             <div className="language-box">
               <label htmlFor="interpreter-source-language">Você fala</label>
-              <select id="interpreter-source-language" value={source} onChange={(event) => setSource(event.target.value as Lang)} disabled={listening || pending}>
+              <select id="interpreter-source-language" value={source} onChange={(event) => { translationSequenceRef.current += 1; setSource(event.target.value as Lang); setTranslated(""); setError(""); setDownloadRequest(null); setStatus("Idiomas atualizados; pronto para traduzir."); }} disabled={listening || pending}>
                 {LANGS.map((language) => <option key={language.code} value={language.code}>{language.flag} {language.label}</option>)}
               </select>
             </div>
             <button className="swap-language" onClick={swap} disabled={listening || pending} aria-label="Inverter idiomas"><RotateCcw size={19} /></button>
             <div className="language-box">
               <label htmlFor="interpreter-target-language">IRIS responde</label>
-              <select id="interpreter-target-language" value={target} onChange={(event) => setTarget(event.target.value as Lang)} disabled={listening || pending}>
+              <select id="interpreter-target-language" value={target} onChange={(event) => { translationSequenceRef.current += 1; setTarget(event.target.value as Lang); setTranslated(""); setError(""); setDownloadRequest(null); setStatus("Idiomas atualizados; pronto para traduzir."); }} disabled={listening || pending}>
                 {LANGS.map((language) => <option key={language.code} value={language.code}>{language.flag} {language.label}</option>)}
               </select>
             </div>
@@ -311,10 +367,13 @@ export default function Interpreter() {
                 value={heard}
                 onChange={(event) => {
                   const value = event.target.value.slice(0, MAX_TEXT_LENGTH);
+                  translationSequenceRef.current += 1;
                   setHeard(value);
                   voiceTextRef.current = value;
                   setTranslated("");
                   setError("");
+                  setDownloadRequest(null);
+                  setStatus(value.trim() ? "Texto atualizado; clique em Traduzir quando quiser." : "Pronto para interpretar");
                 }}
                 maxLength={MAX_TEXT_LENGTH}
                 rows={6}
@@ -340,8 +399,30 @@ export default function Interpreter() {
             </div>
           </div>
 
+          {downloadRequest && (
+            <div className="interpreter-note" role="status" style={{ flexDirection: "column", gap: 8 }}>
+              <span>O preparo pode baixar e armazenar um modelo de tradução no navegador. Nada foi baixado ainda.</span>
+              <Button
+                variant="outline"
+                disabled={pending || heard !== downloadRequest.text || source !== downloadRequest.source || target !== downloadRequest.target}
+                onClick={() => void translateText(downloadRequest.text, true)}
+              >
+                Autorizar download e traduzir neste dispositivo
+              </Button>
+            </div>
+          )}
+
+          {heard.trim() && (
+            <div className="interpreter-note" style={{ flexDirection: "column", gap: 8 }}>
+              <span>Alternativa manual: o texto só será compartilhado com o Google se você clicar e confirmar.</span>
+              <Button variant="outline" onClick={openManualTranslator} disabled={pending}>
+                Abrir Google Tradutor manualmente
+              </Button>
+            </div>
+          )}
+
           <p id="interpreter-consent-note" className="interpreter-consent-note">
-            O texto digitado, colado ou reconhecido pela voz só é enviado à IA quando você seleciona <b>Traduzir</b>. O reconhecimento depende do navegador e pode usar serviços próprios dele.
+            Digitação e ditado não enviam conteúdo. “Traduzir” usa o tradutor do navegador se estiver pronto; a IA remota só é usada após seu clique e com acesso conectado desbloqueado. O reconhecimento de voz pode usar serviços próprios do navegador.
           </p>
 
           <div className="interpreter-controls">
@@ -362,6 +443,7 @@ export default function Interpreter() {
             <Button variant="outline" onClick={clear} disabled={pending || (!heard && !translated && !error)}>Limpar</Button>
           </div>
 
+          <RemoteServiceAccess compact />
           {!supported && <p className="interpreter-note">Reconhecimento de voz não está disponível neste navegador. Você ainda pode digitar ou colar até {MAX_TEXT_LENGTH.toLocaleString("pt-BR")} caracteres.</p>}
           {error && <p className="interpreter-error" role="alert">{error}</p>}
           <p className="interpreter-note"><Languages size={15} /> Português ↔ Inglês, Espanhol, Francês, Alemão, Chinês e Japonês.</p>

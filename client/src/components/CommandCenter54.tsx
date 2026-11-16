@@ -29,6 +29,7 @@ import {
   isIrisRemoteModeEnabled,
   googleCalendarCreate,
   googleCalendarDelete,
+  googleCalendarCalendars,
   googleCalendarEvents,
   googleCalendarStatus,
   googleCalendarUpdate,
@@ -39,6 +40,16 @@ import {
   type GmailSummary,
   type GoogleCalendarEvent,
 } from "@/lib/irisWorker";
+import {
+  buildCalendarDateTime,
+  calendarCanWrite,
+  calendarDateForDisplay,
+  calendarRange,
+  formatCalendarDateTimeInputValue as calendarDateTimeInputValue,
+  formatCalendarEventPeriod,
+  parseAgendaQuestion,
+  type GoogleCalendarInfo,
+} from "@/lib/calendar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -63,6 +74,8 @@ import {
 } from "lucide-react";
 import IrisOcularEye from "./IrisOcularEye";
 import IrisHealthCenter from "./IrisHealthCenter";
+import AgendaCalendar, { ALL_CALENDARS, type AgendaCalendarMode } from "./AgendaCalendar";
+import RemoteServiceAccess from "./RemoteServiceAccess";
 import "./command-center-54.css";
 
 export type Priority =
@@ -131,6 +144,7 @@ type ChatMessage = {
   text: string;
   attachments?: Array<{ name: string; type: string }>;
   oauthAction?: "gmail" | "drive" | "calendar";
+  agendaAction?: boolean;
 };
 
 type AttachmentMimeType =
@@ -196,98 +210,6 @@ function selectGmailMessage(messages: GmailSummary[], command: string) {
     matches,
     identified: true,
   };
-}
-
-function calendarDateTimeInputValue(date?: GoogleCalendarDate): string {
-  if (!date?.dateTime) return "";
-  const timeZone = date.timeZone ?? (date.dateTime.endsWith("Z") ? "UTC" : undefined);
-  if (timeZone) {
-    try {
-      const parts = new Intl.DateTimeFormat("en-CA", {
-        timeZone,
-        year: "numeric",
-        month: "2-digit",
-        day: "2-digit",
-        hour: "2-digit",
-        minute: "2-digit",
-        hourCycle: "h23",
-      }).formatToParts(new Date(date.dateTime));
-      const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
-      if (values.year && values.month && values.day && values.hour && values.minute)
-        return `${values.year}-${values.month}-${values.day}T${values.hour}:${values.minute}`;
-    } catch {
-      // Use the source's own wall time below if its timezone cannot be formatted.
-    }
-  }
-  const wallTime = date.dateTime.match(/^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2})/);
-  if (wallTime) return wallTime[1];
-  const parsed = new Date(date.dateTime);
-  if (Number.isNaN(parsed.getTime())) return "";
-  const pad = (number: number) => String(number).padStart(2, "0");
-  return `${parsed.getFullYear()}-${pad(parsed.getMonth() + 1)}-${pad(parsed.getDate())}T${pad(parsed.getHours())}:${pad(parsed.getMinutes())}`;
-}
-
-function dateTimeLocalToIsoInZone(value: string, timeZone: string): string {
-  const match = value.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/);
-  if (!match) throw new Error("Informe uma data e hora válidas.");
-  const [, year, month, day, hour, minute] = match;
-  const desiredWallTime = Date.UTC(Number(year), Number(month) - 1, Number(day), Number(hour), Number(minute));
-  const formatter = new Intl.DateTimeFormat("en-CA", {
-    timeZone,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    hourCycle: "h23",
-  });
-  let utcTime = desiredWallTime;
-  for (let attempt = 0; attempt < 5; attempt += 1) {
-    const parts = Object.fromEntries(formatter.formatToParts(new Date(utcTime)).map((part) => [part.type, part.value]));
-    const displayedWallTime = Date.UTC(
-      Number(parts.year), Number(parts.month) - 1, Number(parts.day),
-      Number(parts.hour), Number(parts.minute),
-    );
-    const difference = displayedWallTime - utcTime;
-    if (difference === 0) break;
-    utcTime = desiredWallTime - difference;
-  }
-  const check = Object.fromEntries(formatter.formatToParts(new Date(utcTime)).map((part) => [part.type, part.value]));
-  if (`${check.year}-${check.month}-${check.day}T${check.hour}:${check.minute}` !== value)
-    throw new Error("Esse horário não existe no fuso selecionado devido à mudança de horário local.");
-  return new Date(utcTime).toISOString();
-}
-
-function buildCalendarDateTime(value: string, original?: GoogleCalendarDate): GoogleCalendarDate {
-  const timeZone = original?.timeZone ?? (original?.dateTime?.endsWith("Z") ? "UTC" : undefined);
-  if (timeZone) return { dateTime: dateTimeLocalToIsoInZone(value, timeZone), timeZone };
-  const originalOffset = original?.dateTime?.match(/([+-]\d{2}:\d{2})$/)?.[1];
-  if (originalOffset) return { dateTime: `${value}:00${originalOffset}` };
-  const browserTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
-  return {
-    dateTime: dateTimeLocalToIsoInZone(value, browserTimeZone),
-    timeZone: browserTimeZone,
-  };
-}
-
-function calendarDateForDisplay(date?: GoogleCalendarDate): string {
-  if (date?.date) {
-    const parsed = new Date(`${date.date}T12:00:00`);
-    return Number.isNaN(parsed.getTime()) ? date.date : parsed.toLocaleDateString("pt-BR");
-  }
-  if (!date?.dateTime) return "Data não informada";
-  const parsed = new Date(date.dateTime);
-  if (Number.isNaN(parsed.getTime())) return date.dateTime;
-  const timeZone = date.timeZone ?? (date.dateTime.endsWith("Z") ? "UTC" : undefined);
-  try {
-    return parsed.toLocaleString("pt-BR", {
-      dateStyle: "short",
-      timeStyle: "short",
-      ...(timeZone ? { timeZone } : {}),
-    });
-  } catch {
-    return parsed.toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
-  }
 }
 
 const initialItems: RadarItem[] = [
@@ -414,6 +336,13 @@ export default function CommandCenter54() {
   const [editText, setEditText] = useState("");
   const [newTaskInput, setNewTaskInput] = useState("");
   const [calendarEvents, setCalendarEvents] = useState<GoogleCalendarEvent[]>([]);
+  const [calendarCatalog, setCalendarCatalog] = useState<GoogleCalendarInfo[]>([]);
+  const [calendarScopeId, setCalendarScopeId] = useState(ALL_CALENDARS);
+  const [calendarPeriodMode, setCalendarPeriodMode] = useState<AgendaCalendarMode>("month");
+  const [calendarCursorDate, setCalendarCursorDate] = useState(() => new Date());
+  const [calendarTruncated, setCalendarTruncated] = useState(false);
+  const [calendarWarnings, setCalendarWarnings] = useState<string[]>([]);
+  const [calendarCreateCalendarId, setCalendarCreateCalendarId] = useState("primary");
   const [calendarAuthorized, setCalendarAuthorized] = useState(false);
   const [calendarMessage, setCalendarMessage] = useState("Carregando agenda autorizada…");
   const [calendarError, setCalendarError] = useState("");
@@ -432,6 +361,8 @@ export default function CommandCenter54() {
   const chatPinnedToBottomRef = useRef(true);
   const { theme, toggleTheme } = useTheme();
   const canManageCalendar = remoteAccessReady && calendarAuthorized && isIrisRemoteModeEnabled() && isIrisAccessUnlocked();
+  const createCalendar = calendarCatalog.find((calendar) => calendar.id === calendarCreateCalendarId);
+  const canCreateCalendar = canManageCalendar && calendarCanWrite(createCalendar?.accessRole);
 
   useEffect(() => {
     const requestedView = new URLSearchParams(search).get("view");
@@ -448,14 +379,23 @@ export default function CommandCenter54() {
     navigate(item.href);
   };
 
-  const refreshCalendar = async () => {
+  const calendarRequestRef = useRef(0);
+  const refreshCalendar = async (
+    requestedRange = calendarRange(calendarCursorDate, calendarPeriodMode),
+    requestedScopeId = calendarScopeId,
+  ) => {
+    const requestId = ++calendarRequestRef.current;
     setCalendarLoading(true);
     setCalendarError("");
+    setCalendarEvents([]);
     try {
       if (!isIrisRemoteModeEnabled()) {
         calendarRetryAfterUnlockRef.current = true;
         setCalendarAuthorized(false);
         setCalendarEvents([]);
+        setCalendarCatalog([]);
+        setCalendarTruncated(false);
+        setCalendarWarnings([]);
         setCalendarAccessHelp("settings");
         setCalendarMessage(
           "A Agenda do Google está bloqueada intencionalmente no modo Demonstração. Nenhum dado foi enviado. Ative o acesso remoto em Configurações somente se quiser usar esse recurso.",
@@ -465,10 +405,14 @@ export default function CommandCenter54() {
 
       if (!isIrisAccessUnlocked()) {
         const restored = await restoreIrisAccess();
+        if (requestId !== calendarRequestRef.current) return false;
         if (!restored.restored || !isIrisAccessUnlocked()) {
           calendarRetryAfterUnlockRef.current = true;
           setCalendarAuthorized(false);
           setCalendarEvents([]);
+          setCalendarCatalog([]);
+          setCalendarTruncated(false);
+          setCalendarWarnings([]);
           setCalendarAccessHelp("settings");
           setCalendarMessage(
             "A Agenda exige uma sessão remota desbloqueada. Nenhuma consulta de compromissos foi enviada; desbloqueie o acesso remoto em Configurações para continuar.",
@@ -480,10 +424,14 @@ export default function CommandCenter54() {
       setCalendarAccessHelp(null);
       setCalendarMessage("Verificando autorização do Google Calendar…");
       const status = await googleCalendarStatus();
+      if (requestId !== calendarRequestRef.current) return false;
       if (!status.authorized) {
         calendarRetryAfterUnlockRef.current = false;
         setCalendarAuthorized(false);
         setCalendarEvents([]);
+        setCalendarCatalog([]);
+        setCalendarTruncated(false);
+        setCalendarWarnings([]);
         setCalendarAccessHelp("connections");
         setCalendarMessage(
           "O Google Calendar ainda não está autorizado. Nenhum compromisso foi consultado; abra Conexões para autorizar quando desejar.",
@@ -492,18 +440,45 @@ export default function CommandCenter54() {
       }
 
       setCalendarAuthorized(true);
-      setCalendarMessage("Consultando agenda autorizada…");
-      const result = await googleCalendarEvents(new Date().toISOString());
-      const events = result.items ?? [];
+      setCalendarMessage(`Consultando agendas para ${requestedRange.label}…`);
+      const calendarList = await googleCalendarCalendars();
+      if (requestId !== calendarRequestRef.current) return false;
+      setCalendarCatalog(calendarList.items);
+      const effectiveScopeId = requestedScopeId !== ALL_CALENDARS && !calendarList.items.some((calendar) => calendar.id === requestedScopeId)
+        ? ALL_CALENDARS
+        : requestedScopeId;
+      if (effectiveScopeId !== requestedScopeId) setCalendarScopeId(effectiveScopeId);
+      const nextCreateCalendar = calendarList.items.find((calendar) => calendar.id === calendarCreateCalendarId)
+        ?? calendarList.items.find((calendar) => calendar.primary)
+        ?? calendarList.items[0];
+      if (nextCreateCalendar && nextCreateCalendar.id !== calendarCreateCalendarId) setCalendarCreateCalendarId(nextCreateCalendar.id);
+      const result = await googleCalendarEvents({
+        timeMin: requestedRange.timeMin,
+        timeMax: requestedRange.timeMax,
+        calendars: calendarList.items,
+        ...(effectiveScopeId !== ALL_CALENDARS ? { calendarId: effectiveScopeId } : {}),
+      });
+      if (requestId !== calendarRequestRef.current || !isIrisRemoteModeEnabled() || !isIrisAccessUnlocked()) return false;
+      const events = result.items;
+      const warnings = [calendarList.warning, ...result.warnings].filter((warning): warning is string => Boolean(warning));
       calendarRetryAfterUnlockRef.current = false;
       setCalendarEvents(events);
+      setCalendarTruncated(calendarList.truncated || result.truncated);
+      setCalendarWarnings(warnings);
+      const sourceCount = result.calendarsQueried.length;
       setCalendarMessage(events.length
-        ? "Agenda sincronizada com o Google Calendar."
-        : "Nenhum compromisso futuro encontrado.");
+        ? `${events.length} compromisso(s) consultado(s) em ${sourceCount} agenda(s), no período ${requestedRange.label}.`
+        : calendarList.truncated || result.truncated
+          ? `Nenhum compromisso foi retornado no período ${requestedRange.label}, mas a consulta é parcial; confira os avisos antes de concluir que não há eventos.`
+          : `Nenhum compromisso encontrado no período ${requestedRange.label} nas ${sourceCount} agenda(s) consultadas.`);
       return true;
     } catch (error) {
+      if (requestId !== calendarRequestRef.current) return false;
       calendarRetryAfterUnlockRef.current = false;
       setCalendarAuthorized(false);
+      setCalendarEvents([]);
+      setCalendarTruncated(false);
+      setCalendarWarnings([]);
       setCalendarAccessHelp(null);
       setCalendarMessage("Falha de rede ao consultar o Google Calendar. Tente novamente.");
       setCalendarError(error instanceof Error
@@ -511,13 +486,17 @@ export default function CommandCenter54() {
         : "A conexão com o Google Calendar falhou.");
       return false;
     } finally {
-      setCalendarLoading(false);
+      if (requestId === calendarRequestRef.current) setCalendarLoading(false);
     }
   };
 
   const createCalendarEvent = async () => {
     if (!canManageCalendar) {
       setCalendarError("A criação exige o modo remoto, acesso desbloqueado e Google Calendar autorizado.");
+      return;
+    }
+    if (!canCreateCalendar || !createCalendar) {
+      setCalendarError("Selecione uma agenda Google com permissão de edição. Agendas somente leitura ou sem permissão confirmada não podem receber alterações.");
       return;
     }
     const summary = calendarCreateDraft.summary.trim();
@@ -549,15 +528,15 @@ export default function CommandCenter54() {
     }
 
     if (!window.confirm(
-      `Confirmar criação deste evento no Google Calendar?\n\nTítulo: ${summary}\nInício: ${startValue.replace("T", " ")}\nFim: ${endValue.replace("T", " ")}\n\nO evento só será enviado após esta confirmação.`,
+      `Confirmar criação deste evento no Google Calendar?\n\nAgenda: ${createCalendar.summary}\nTítulo: ${summary}\nInício: ${startValue.replace("T", " ")}\nFim: ${endValue.replace("T", " ")}\n\nO evento só será enviado após esta confirmação.`,
     )) return;
 
     setCalendarCreateBusy(true);
     setCalendarError("");
     try {
-      await googleCalendarCreate({ summary, start, end }, true);
+      await googleCalendarCreate({ summary, start, end }, true, createCalendar.id);
       setCalendarCreateDraft({ summary: "", start: "", end: "" });
-      setCalendarMessage("Evento criado no Google Calendar.");
+      setCalendarMessage(`Evento criado na agenda “${createCalendar.summary}”.`);
       await refreshCalendar();
     } catch (error) {
       const detail = error instanceof Error ? error.message : "Falha ao criar o evento.";
@@ -569,7 +548,7 @@ export default function CommandCenter54() {
   };
 
   const beginCalendarEdit = (event: GoogleCalendarEvent) => {
-    if (!canManageCalendar) return;
+    if (!canManageCalendar || !calendarCanWrite(event.accessRole)) return;
     const allDay = Boolean(event.start?.date);
     const eventStart = event.start as GoogleCalendarDate | undefined;
     const eventEnd = event.end as GoogleCalendarDate | undefined;
@@ -587,7 +566,7 @@ export default function CommandCenter54() {
         ? event.end?.date ?? ""
         : calendarDateTimeInputValue(eventEnd ? { ...eventEnd, timeZone: eventEnd.timeZone ?? eventTimeZone } : undefined),
     });
-    setEditingCalendarEventId(event.id);
+    setEditingCalendarEventId(event.identity);
   };
 
   const changeCalendarAllDay = (allDay: boolean) => {
@@ -612,15 +591,21 @@ export default function CommandCenter54() {
       return;
     }
     if (!calendarDraft || !editingCalendarEventId) return;
-    const event = calendarEvents.find((candidate) => candidate.id === editingCalendarEventId);
+    const event = calendarEvents.find((candidate) => candidate.identity === editingCalendarEventId);
     if (!event) return;
     const summary = calendarDraft.summary.trim();
     if (!summary || !calendarDraft.start || !calendarDraft.end) {
       setCalendarError("Informe o título, a data/hora inicial e a data/hora final.");
       return;
     }
-    if (calendarDraft.end < calendarDraft.start) {
+    const startValue = Date.parse(calendarDraft.allDay ? `${calendarDraft.start}T00:00:00` : calendarDraft.start);
+    const endValue = Date.parse(calendarDraft.allDay ? `${calendarDraft.end}T00:00:00` : calendarDraft.end);
+    if (!Number.isFinite(startValue) || !Number.isFinite(endValue) || endValue <= startValue) {
       setCalendarError("A data/hora final precisa ser posterior à inicial.");
+      return;
+    }
+    if (!calendarCanWrite(event.accessRole)) {
+      setCalendarError("Esta agenda é somente leitura ou não tem permissão de edição confirmada.");
       return;
     }
 
@@ -652,16 +637,13 @@ export default function CommandCenter54() {
       ? `${calendarDraft.start} até ${calendarDraft.end} (dia inteiro)`
       : `${calendarDraft.start.replace("T", " ")} até ${calendarDraft.end.replace("T", " ")}`;
     if (!window.confirm(
-      `Confirmar atualização deste evento no Google Calendar?\n\nTítulo: ${summary}\nData: ${displayedDate}\n\nO Calendar receberá PATCH somente após esta confirmação.`,
+      `Confirmar atualização deste evento no Google Calendar?\n\nAgenda: ${event.calendarName}\nTítulo: ${summary}\nData: ${displayedDate}\n\nO Calendar receberá PATCH somente após esta confirmação.`,
     )) return;
 
-    setCalendarActionBusyId(event.id);
+    setCalendarActionBusyId(event.identity);
     setCalendarError("");
     try {
-      const updated = await googleCalendarUpdate(event.id, payload, true);
-      setCalendarEvents((current) => current.map((candidate) =>
-        candidate.id === event.id ? updated : candidate,
-      ));
+      await googleCalendarUpdate(event.id, payload, true, event.calendarId);
       setEditingCalendarEventId(null);
       setCalendarDraft(null);
       setCalendarMessage("Evento atualizado no Google Calendar.");
@@ -680,18 +662,22 @@ export default function CommandCenter54() {
       setCalendarError("A exclusão exige o modo remoto, acesso desbloqueado e Google Calendar autorizado.");
       return;
     }
+    if (!calendarCanWrite(event.accessRole)) {
+      setCalendarError("Esta agenda é somente leitura ou não tem permissão de edição confirmada; nada foi enviado.");
+      return;
+    }
     const title = event.summary?.trim() || "Compromisso sem título";
     const start = calendarDateForDisplay(event.start as GoogleCalendarDate | undefined);
     const end = calendarDateForDisplay(event.end as GoogleCalendarDate | undefined);
     if (!window.confirm(
-      `Confirmar exclusão deste evento do Google Calendar?\n\nTítulo: ${title}\nData: ${start}${end !== "Data não informada" ? ` até ${end}` : ""}\n\nA exclusão só será solicitada após esta confirmação.`,
+      `Confirmar exclusão deste evento do Google Calendar?\n\nAgenda: ${event.calendarName}\nTítulo: ${title}\nData: ${start}${end !== "Data não informada" ? ` até ${end}` : ""}\n\nA exclusão só será solicitada após esta confirmação.`,
     )) return;
 
-    setCalendarActionBusyId(event.id);
+    setCalendarActionBusyId(event.identity);
     setCalendarError("");
     try {
-      await googleCalendarDelete(event.id, true);
-      setCalendarEvents((current) => current.filter((candidate) => candidate.id !== event.id));
+      await googleCalendarDelete(event.id, true, event.calendarId);
+      setCalendarEvents((current) => current.filter((candidate) => candidate.identity !== event.identity));
       setEditingCalendarEventId(null);
       setCalendarDraft(null);
       setCalendarMessage("Evento excluído do Google Calendar.");
@@ -754,14 +740,18 @@ export default function CommandCenter54() {
   }, []);
 
   useEffect(() => {
-    if (activeView === "agenda") void refreshCalendar();
-  }, [activeView]);
+    if (activeView === "agenda") {
+      void refreshCalendar(calendarRange(calendarCursorDate, calendarPeriodMode), calendarScopeId);
+    }
+  }, [activeView, calendarCursorDate, calendarPeriodMode, calendarScopeId]);
 
   useEffect(() => {
     const onRemoteAccessChanged = () => {
       const ready = isIrisRemoteModeEnabled() && isIrisAccessUnlocked();
       setRemoteAccessReady(ready);
       if (!ready) {
+        calendarRequestRef.current += 1;
+        setCalendarLoading(false);
         setCalendarAuthorized(false);
         setCalendarEvents([]);
         setEditingCalendarEventId(null);
@@ -1264,33 +1254,6 @@ export default function CommandCenter54() {
         return;
       }
 
-      const isCalendarCommand = /(calendário|calendario|agenda|calendar|compromisso|evento)/i.test(text);
-      if (isCalendarCommand) {
-        const status = await googleCalendarStatus();
-        if (!status.authorized) {
-          const reply = "O Google Calendar ainda não está autorizado. Abra Conexões e autorize o Calendar antes de consultar a agenda.";
-          setChat((current) => [...current, { role: "assistant", text: reply }]);
-          if (voiceEnabled) voice.speak(reply);
-          return;
-        }
-        const calendar = await googleCalendarEvents(new Date().toISOString());
-        const events = (calendar.items ?? []).slice(0, 10);
-        const reply = events.length
-          ? `Aqui estão os próximos compromissos da sua agenda:\n${events.map((event, index) => {
-              const date = event.start?.dateTime
-                ? new Date(event.start.dateTime).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })
-                : event.start?.date
-                  ? new Date(`${event.start.date}T00:00:00`).toLocaleDateString("pt-BR")
-                  : "horário não informado";
-              return `${index + 1}. ${event.summary || "Sem título"} — ${date}${event.location ? ` — ${event.location}` : ""}`;
-            }).join("\n")}`
-          : "Não encontrei compromissos futuros na sua agenda autorizada.";
-        setChat((current) => [...current, { role: "assistant", text: reply }]);
-        if (voiceEnabled) voice.speak(reply);
-        setIrisState("completed");
-        return;
-      }
-
       const result = await askIrisWorker(text);
       const reply = result.text || "Não recebi uma resposta do Worker.";
       setChat((current) => [...current, { role: "assistant", text: reply }]);
@@ -1325,6 +1288,67 @@ export default function CommandCenter54() {
     }
   };
 
+  const queryAgendaQuestion = async (question: NonNullable<ReturnType<typeof parseAgendaQuestion>>) => {
+    const range = question.range;
+    if (!isIrisRemoteModeEnabled() || !isIrisAccessUnlocked()) {
+      const reply = !isIrisRemoteModeEnabled()
+        ? `Consulta de Agenda não executada para ${question.label}: o modo Demonstração está ativo e nenhum dado foi enviado. Ative os serviços remotos em Configurações e desbloqueie a sessão somente se quiser consultar o Google Calendar.`
+        : `Consulta de Agenda não executada para ${question.label}: desbloqueie os serviços remotos e repita o pedido. Nenhum compromisso foi consultado.`;
+      setChat((current) => [...current, { role: "assistant", text: reply, agendaAction: true }]);
+      setIrisState("idle");
+      return;
+    }
+
+    setIsProcessing(true);
+    setCalendarLoading(true);
+    setIrisState("analyzing");
+    try {
+      const status = await googleCalendarStatus();
+      if (!status.authorized) {
+        const reply = `Consulta não executada para ${question.label}: o Google Calendar ainda não foi autorizado. Nenhum compromisso foi lido; use o botão para iniciar OAuth manualmente quando desejar.`;
+        setChat((current) => [...current, { role: "assistant", text: reply, oauthAction: "calendar", agendaAction: true }]);
+        setCalendarAuthorized(false);
+        return;
+      }
+
+      const calendarList = await googleCalendarCalendars();
+      const result = await googleCalendarEvents({
+        timeMin: range.timeMin,
+        timeMax: range.timeMax,
+        calendars: calendarList.items,
+        ...(calendarScopeId !== ALL_CALENDARS ? { calendarId: calendarScopeId } : {}),
+      });
+      setCalendarAuthorized(true);
+      setCalendarCatalog(result.calendars);
+
+      const total = result.items.length;
+      const statusLabel = calendarList.truncated || result.truncated
+        ? `A consulta é parcial: foram retornados ${total} compromissos, portanto esse é um mínimo, não um total completo.`
+        : `${total} compromisso(s) encontrado(s).`;
+      const shown = result.items.slice(0, 50);
+      const lines = shown.map((event, index) =>
+        `${index + 1}. ${event.summary || "Compromisso sem título"} — ${formatCalendarEventPeriod(event)} · ${event.calendarName}${calendarCanWrite(event.accessRole) ? "" : " · somente leitura"}`,
+      );
+      const omitted = total > shown.length
+        ? `\nA lista abaixo mostra ${shown.length} de ${total} compromissos retornados; nenhum foi omitido sem aviso. Abra a Agenda e selecione os meses/dias deste período para consultar os demais.`
+        : "";
+      const warnings = [calendarList.warning, ...result.warnings].filter((warning): warning is string => Boolean(warning));
+      const emptyResult = calendarList.truncated || result.truncated
+        ? "\nNenhum compromisso foi retornado antes do limite; não é possível concluir que o período está vazio."
+        : "\nNenhum compromisso retornado neste período.";
+      const reply = `Consulta real ao Google Calendar · ${question.label} (${range.label}). ${statusLabel}${warnings.length ? `\nAvisos: ${warnings.join(" ")}` : ""}${lines.length ? `\n${lines.join("\n")}` : emptyResult}${omitted}`;
+      setChat((current) => [...current, { role: "assistant", text: reply, agendaAction: true }]);
+      if (voiceEnabled) voice.speak(`${question.label}. ${statusLabel}`);
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : "Falha ao consultar o Google Calendar.";
+      setChat((current) => [...current, { role: "assistant", text: `Não consegui consultar compromissos reais para ${question.label}: ${detail}. Nenhuma resposta foi gerada por IA sem os dados da agenda.`, agendaAction: true }]);
+    } finally {
+      setCalendarLoading(false);
+      setIsProcessing(false);
+      setIrisState("idle");
+    }
+  };
+
   const sendMessage = async (preset?: string) => {
     const text = (preset ?? commandText).trim();
     if (!text && attachments.length === 0) return;
@@ -1345,6 +1369,18 @@ export default function CommandCenter54() {
 
     // Ao enviar comando, abre automaticamente a visualização do Assistente para leitura
     setActiveView("assistente");
+
+    const agendaQuestion = selectedAttachments.length === 0 ? parseAgendaQuestion(text) : null;
+    if (agendaQuestion) {
+      await queryAgendaQuestion(agendaQuestion);
+      return;
+    }
+
+    if (selectedAttachments.length === 0 && /\b(agenda|calendario|calendar|compromissos?|eventos?|reunioes?)\b/.test(text.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase())) {
+      const reply = "Para consultar compromissos reais, informe hoje, amanhã, semana, mês ou um intervalo válido, por exemplo: agenda de 12/11/2026 a 15/11/2026. Para criar, editar ou excluir eventos, abra Agenda e confirme a ação no formulário. Nenhum evento ou tarefa foi alterado por esta pergunta.";
+      setChat((current) => [...current, { role: "assistant", text: reply, agendaAction: true }]);
+      return;
+    }
 
     if (!isIrisRemoteModeEnabled() || !isIrisAccessUnlocked()) {
       const isLocalReminder = /(vence|vencimento|pagar|lembrete|lembrar|dia \d{1,2}|amanhã|amanha|tarefa|comprar)/i.test(text);
@@ -1927,6 +1963,12 @@ export default function CommandCenter54() {
                           <ExternalLink size={15} />
                         </Button>
                       )}
+                      {message.role === "assistant" && message.agendaAction && (
+                        <Button type="button" variant="outline" onClick={() => setActiveView("agenda")}>
+                          Abrir Agenda
+                          <Calendar size={15} />
+                        </Button>
+                      )}
                     </div>
                   ))}
                   {(suggest.isPending ||
@@ -2244,10 +2286,7 @@ export default function CommandCenter54() {
                     <h2>
                       <Calendar size={20} color="#38bdf8" /> Agenda Inteligente
                     </h2>
-                    <p>
-                      Compromissos, vencimentos e prazos organizados pela Iris
-                      IA.
-                    </p>
+                    <p>Consulte e gerencie compromissos reais nas agendas Google acessíveis; perguntas nunca criam ou alteram eventos.</p>
                   </div>
                   <div className="iris54-calendar-header-actions">
                     <Button
@@ -2271,19 +2310,41 @@ export default function CommandCenter54() {
                   </div>
                 </div>
 
+                <RemoteServiceAccess onReady={() => {
+                  setRemoteAccessReady(true);
+                }} />
                 {calendarMessage && <p className="iris54-source-message" role="status">{calendarMessage}</p>}
                 {calendarError && <p className="iris54-source-error" role="alert">{calendarError}</p>}
-                {calendarAccessHelp && (
-                  <p style={{ margin: "0 0 16px" }}>
+                <AgendaCalendar
+                  date={calendarCursorDate}
+                  mode={calendarPeriodMode}
+                  range={calendarRange(calendarCursorDate, calendarPeriodMode)}
+                  events={calendarEvents}
+                  calendars={calendarCatalog}
+                  selectedCalendarId={calendarScopeId}
+                  loading={calendarLoading}
+                  truncated={calendarTruncated}
+                  warnings={calendarWarnings}
+                  onDateChange={setCalendarCursorDate}
+                  onModeChange={setCalendarPeriodMode}
+                  onCalendarChange={setCalendarScopeId}
+                />
+                {calendarAccessHelp === "connections" && (
+                  <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 10, margin: "0 0 16px" }}>
                     <Link
-                      href={calendarAccessHelp === "settings" ? "/configuracoes" : "/conexoes"}
+                      href="/conexoes"
                       className="iris54-top-btn"
                       style={{ display: "inline-flex", alignItems: "center", gap: 6, textDecoration: "none" }}
                     >
-                      {calendarAccessHelp === "settings" ? "Abrir Configurações" : "Abrir Conexões"}
+                      Abrir Conexões
                       <ExternalLink size={14} />
                     </Link>
-                  </p>
+                    {remoteAccessReady && (
+                      <Button type="button" variant="outline" onClick={() => void connectChatGoogle("calendar")}>
+                        Autorizar Google Calendar com OAuth
+                      </Button>
+                    )}
+                  </div>
                 )}
                 {canManageCalendar && (
                   <section className="iris54-feature-card" style={{ marginBottom: 20 }} aria-label="Criar evento no Google Calendar">
@@ -2297,6 +2358,21 @@ export default function CommandCenter54() {
                           onChange={(e) => setCalendarCreateDraft((current) => ({ ...current, summary: e.target.value }))}
                           autoComplete="off"
                         />
+                      </label>
+                      <label className="iris54-calendar-field">
+                        Agenda de destino
+                        <select
+                          value={calendarCreateCalendarId}
+                          onChange={(e) => setCalendarCreateCalendarId(e.target.value)}
+                          disabled={calendarLoading || calendarCreateBusy}
+                        >
+                          {calendarCatalog.filter((calendar) => calendarCanWrite(calendar.accessRole)).length === 0 && (
+                            <option value="" disabled>Nenhuma agenda com permissão de escrita</option>
+                          )}
+                          {calendarCatalog.filter((calendar) => calendarCanWrite(calendar.accessRole)).map((calendar) => (
+                            <option key={calendar.id} value={calendar.id}>{calendar.summary}{calendar.primary ? " · principal" : ""}</option>
+                          ))}
+                        </select>
                       </label>
                       <div className="iris54-calendar-date-fields">
                         <label className="iris54-calendar-field">
@@ -2320,7 +2396,7 @@ export default function CommandCenter54() {
                         <Button
                           type="button"
                           onClick={() => void createCalendarEvent()}
-                          disabled={calendarCreateBusy || calendarLoading || calendarActionBusyId !== null}
+                          disabled={!canCreateCalendar || calendarCreateBusy || calendarLoading || calendarActionBusyId !== null}
                         >
                           <Plus size={14} /> {calendarCreateBusy ? "Criando…" : "Criar evento"}
                         </Button>
@@ -2328,11 +2404,11 @@ export default function CommandCenter54() {
                     </div>
                   </section>
                 )}
-                <div className="iris54-feature-grid">
-                  {calendarEvents.length ? calendarEvents.slice(0, 12).map((event) => (
-                    <article className="iris54-feature-card iris54-calendar-event-card" key={event.id}>
+                <div className="iris54-feature-grid" aria-label={calendarPeriodMode === "day" ? "Compromissos do dia" : "Compromissos do mês"}>
+                  {calendarEvents.length ? calendarEvents.map((event) => (
+                    <article className="iris54-feature-card iris54-calendar-event-card" key={event.identity}>
                       <span className="iris54-priority-badge" style={{ background: "rgba(59, 130, 246, 0.2)", color: "#93c5fd" }}>CALENDAR</span>
-                      {editingCalendarEventId === event.id && calendarDraft && canManageCalendar ? (
+                      {editingCalendarEventId === event.identity && calendarDraft && canManageCalendar ? (
                         <div className="iris54-calendar-edit-form">
                           <label className="iris54-calendar-field">
                             Título
@@ -2391,15 +2467,15 @@ export default function CommandCenter54() {
                             <Button
                               type="button"
                               onClick={() => void saveCalendarEdit()}
-                              disabled={calendarActionBusyId === event.id || calendarLoading}
+                              disabled={calendarActionBusyId === event.identity || calendarLoading}
                             >
-                              {calendarActionBusyId === event.id ? "Salvando…" : "Salvar alteração"}
+                              {calendarActionBusyId === event.identity ? "Salvando…" : "Salvar alteração"}
                             </Button>
                             <Button
                               type="button"
                               variant="outline"
                               onClick={() => { setEditingCalendarEventId(null); setCalendarDraft(null); setCalendarError(""); }}
-                              disabled={calendarActionBusyId === event.id}
+                              disabled={calendarActionBusyId === event.identity}
                             >
                               Cancelar
                             </Button>
@@ -2409,12 +2485,12 @@ export default function CommandCenter54() {
                         <>
                           <strong>{event.summary || "Compromisso sem título"}</strong>
                           <p>
-                            {calendarDateForDisplay(event.start as GoogleCalendarDate | undefined)}
-                            {event.end ? ` até ${calendarDateForDisplay(event.end as GoogleCalendarDate)}` : ""}
+                            {formatCalendarEventPeriod(event)}
                           </p>
+                          <p>Agenda: {event.calendarName} · {calendarCanWrite(event.accessRole) ? "pode editar" : "somente leitura"}</p>
                           {event.location && <p>Local: {event.location}</p>}
                           {event.description && <p>{event.description}</p>}
-                          {canManageCalendar && <div className="iris54-calendar-event-actions">
+                          {canManageCalendar && calendarCanWrite(event.accessRole) && <div className="iris54-calendar-event-actions">
                             <Button
                               type="button"
                               variant="outline"
@@ -2431,8 +2507,8 @@ export default function CommandCenter54() {
                               disabled={!canManageCalendar || calendarActionBusyId !== null || calendarLoading || calendarCreateBusy}
                               aria-label={`Excluir ${event.summary || "compromisso"}`}
                             >
-                              {calendarActionBusyId === event.id ? <Loader2 size={14} className="animate-spin" /> : <X size={14} />}
-                              {calendarActionBusyId === event.id ? "Excluindo…" : "Excluir"}
+                              {calendarActionBusyId === event.identity ? <Loader2 size={14} className="animate-spin" /> : <X size={14} />}
+                              {calendarActionBusyId === event.identity ? "Excluindo…" : "Excluir"}
                             </Button>
                           </div>}
                         </>
@@ -2440,7 +2516,7 @@ export default function CommandCenter54() {
                     </article>
                   )) : !calendarLoading && !calendarError && !calendarAccessHelp ? (
                     <div className="iris54-feature-card">
-                      <strong>Agenda sem compromissos futuros</strong>
+                      <strong>Sem compromissos neste período</strong>
                       <p>{calendarMessage}</p>
                     </div>
                   ) : null}

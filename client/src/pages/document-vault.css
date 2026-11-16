@@ -43,6 +43,10 @@
 .document-confirm { margin-top: .35rem; display: inline-flex; align-items: center; justify-content: center; gap: 5px; width: fit-content; border: 1px solid rgba(134,239,172,.35); border-radius: .55rem; padding: .35rem .55rem; background: rgba(34,197,94,.12); color: #bbf7d0; font-size: .72rem; font-weight: 700; cursor: pointer; }
 .document-confirm:hover { background: rgba(34,197,94,.22); }
 .document-confirm:disabled { opacity: .55; cursor: wait; }
+.document-delete { margin-top: .35rem; display: inline-flex; align-items: center; justify-content: center; gap: 5px; width: fit-content; border: 1px solid rgba(248,113,113,.34); border-radius: .55rem; padding: .35rem .55rem; background: rgba(127,29,29,.2); color: #fca5a5; font-size: .72rem; font-weight: 700; cursor: pointer; }
+.document-delete:hover:not(:disabled) { border-color: rgba(248,113,113,.55); background: rgba(127,29,29,.34); color: #fecaca; }
+.document-delete:focus-visible { outline: 2px solid #fca5a5; outline-offset: 2px; }
+.document-delete:disabled { opacity: .5; cursor: not-allowed; }
 .document-confidence { display: inline-flex; align-items: center; gap: .35rem; }
 .document-confidence-meter { width: 76px; height: 4px; overflow: hidden; border-radius: 999px; background: rgba(148,163,184,.18); }
 .document-confidence-meter i { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg,#f59e0b,#86efac); }
