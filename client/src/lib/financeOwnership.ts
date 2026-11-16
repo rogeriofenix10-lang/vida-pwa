@@ -1,6 +1,6 @@
 export type FinanceHolder = "rogerio" | "aline";
 
-export type FinanceHolderFilter = "all" | FinanceHolder | "unassigned";
+export type FinanceHolderFilter = "all" | "combined" | FinanceHolder | "unassigned";
 
 export function parseFinanceHolder(value: string): FinanceHolder | undefined {
   if (value === "rogerio" || value === "aline") return value;
@@ -17,7 +17,7 @@ export function matchesFinanceHolder(
   record: { holder?: FinanceHolder },
   filter: FinanceHolderFilter,
 ): boolean {
-  if (filter === "all") return true;
+  if (filter === "all" || filter === "combined") return true;
   if (filter === "unassigned") return record.holder === undefined;
   return record.holder === filter;
 }

@@ -20,12 +20,13 @@ describe("finance ownership helpers", () => {
     expect(financeHolderLabel()).toBe("Titular não definido");
   });
 
-  it("matches all, Rogério, Aline and unassigned filters", () => {
+  it("matches consolidated, all, Rogério, Aline and unassigned views", () => {
     const rogerio = { holder: "rogerio" as const };
     const aline = { holder: "aline" as const };
     const unassigned: { holder?: FinanceHolder } = {};
 
     expect([rogerio, aline, unassigned].every((record) => matchesFinanceHolder(record, "all"))).toBe(true);
+    expect([rogerio, aline, unassigned].every((record) => matchesFinanceHolder(record, "combined"))).toBe(true);
     expect(matchesFinanceHolder(rogerio, "rogerio")).toBe(true);
     expect(matchesFinanceHolder(aline, "rogerio")).toBe(false);
     expect(matchesFinanceHolder(aline, "aline")).toBe(true);
