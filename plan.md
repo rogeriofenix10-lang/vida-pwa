@@ -49,6 +49,12 @@ A página `FinanceHub` continua usando a coleção local `irisFinances` no Index
 
 Datas mensais: a data de referência explicitamente escolhida pelo usuário prevalece. Datas de compra completas podem ser usadas diretamente; quando só houver dia/mês, o ano só é reconstruído a partir de vencimento completo e legível da fatura, com aviso de inferência e ajuste na virada do ano. Sem esse contexto, a compra aparece em “Sem data definida” para revisão, nunca no mês de upload por conveniência. Itens manuais legados usam vencimento ou data de cadastro com indicação de origem. Receitas/despesas/saldo do gráfico são movimentações registradas, não saldo bancário real nem total de fatura. Valores em aberto e pagos são identificados separadamente na gestão.
 
+## Complemento — separação financeira por titular (16/11/2026)
+
+Acrescentar em `FinanceHub` o campo de titular opcional `Rogério`/`Aline` para lançamentos e documentos de fatura, com filtros de visão por titular e opção “Titular não definido”. Novas faturas são analisadas localmente para encontrar nome correspondente somente em um campo explícito e legível de titular/portador; autoatribuir e propagar às compras apenas se houver uma única correspondência confiável. Fatura sem nome legível, sem rótulo inequívoco ou com ambiguidade permanece sem titular para revisão manual. Não inferir pela loja, nome do arquivo, banco, bandeira, valores nem número de cartão/conta. Novos lançamentos permitem seleção explícita; atribuir titular a uma fatura atualiza apenas os lançamentos ligados a esse documento que estejam sem titular ou ainda sigam o titular anterior, sem substituir exceções editadas individualmente. Totais, categorias, gráficos, exportação CSV e resumos de fatura respeitam o filtro atual. Histórico anterior permanece sem classificação até reimportação/leitura explícita ou seleção manual; não modificar valores/datas, criar cadastro de contas ou persistir números completos de cartões/contas. Todo o estado continua local no IndexedDB com os campos legados preservados.
+
+Lançamentos derivados distinguem titular herdado da fatura de override manual, inclusive fixar deliberadamente uma despesa como “Titular não definido”; a edição permite retornar a seguir a fatura. Se a releitura não encontrar linhas suficientes ou não reconciliar todo o histórico, preservar despesas, metadados e vencimento anterior (usado para determinar o período) e avisar sem alterar os totais históricos.
+
 
 ## Complemento — navegação sem duplicidade e Arquivo de Documentos (15/11/2026)
 

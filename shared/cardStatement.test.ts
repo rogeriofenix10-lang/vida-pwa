@@ -43,6 +43,120 @@ describe("parseCardStatement", () => {
     expect(statement.warnings.some(warning => warning.includes("somente linhas datadas"))).toBe(true);
   });
 
+  it("detecta Rogério somente por campo explícito e devolve apenas o enum", () => {
+    const statement = parseCardStatement([
+      "Banco do Brasil Visa",
+      "Nome do titular: ROGÉRIO da Silva",
+      "Conta: 123456-7",
+      "TRANSAÇÕES",
+      "14/09 Loja Boreal R$ 50,00",
+    ].join("\n"));
+
+    expect(statement.cardholder).toBe("rogerio");
+    expect(statement.cardholderDetection).toBe("explicit");
+    expect(JSON.stringify(statement)).not.toMatch(/da Silva|123456-7/);
+  });
+
+  it("detecta Aline em campo Cardholder, sem depender de maiúsculas/minúsculas", () => {
+    const statement = parseCardStatement([
+      "Cardholder: ALINE Costa",
+      "TRANSAÇÕES",
+      "14/09 Loja Boreal R$ 50,00",
+    ].join("\n"));
+
+    expect(statement.cardholder).toBe("aline");
+    expect(statement.cardholderDetection).toBe("explicit");
+  });
+
+  it("aceita o valor do titular na linha imediatamente seguinte ao rótulo", () => {
+    const statement = parseCardStatement([
+      "Portador/Nome do portador:",
+      "Rogério Almeida",
+      "TRANSAÇÕES",
+      "14/09 Loja Boreal R$ 50,00",
+    ].join("\n"));
+
+    expect(statement.cardholder).toBe("rogerio");
+    expect(statement.cardholderDetection).toBe("explicit");
+  });
+
+  it("marca como ambíguos campos explícitos que indicam ambos os primeiros nomes", () => {
+    const statement = parseCardStatement([
+      "Titular do cartão: Rogério Almeida",
+      "Cardholder: Aline Costa",
+      "TRANSAÇÕES",
+      "14/09 Loja Boreal R$ 50,00",
+    ].join("\n"));
+
+    expect(statement.cardholder).toBeUndefined();
+    expect(statement.cardholderDetection).toBe("ambiguous");
+  });
+
+  it("não atribui nomes de comerciantes", () => {
+    const statement = parseCardStatement([
+      "Fatura mensal",
+      "TRANSAÇÕES",
+      "14/09 Rogério Café R$ 50,00",
+      "15/09 Aline Fashion R$ 30,00",
+    ].join("\n"));
+
+    expect(statement.cardholder).toBeUndefined();
+    expect(statement.cardholderDetection).toBe("not-found");
+  });
+
+  it("não atribui nomes sem rótulo nem considera campos após o cabeçalho", () => {
+    const unlabelled = parseCardStatement([
+      "Rogério Almeida",
+      "Aline Costa",
+      "TRANSAÇÕES",
+      "14/09 Loja Boreal R$ 50,00",
+    ].join("\n"));
+    const afterFirstDatedRow = parseCardStatement([
+      "Fatura mensal",
+      "14/09 Loja Boreal R$ 50,00",
+      "Titular: Aline Costa",
+    ].join("\n"));
+
+    expect(unlabelled.cardholder).toBeUndefined();
+    expect(unlabelled.cardholderDetection).toBe("not-found");
+    expect(afterFirstDatedRow.cardholder).toBeUndefined();
+    expect(afterFirstDatedRow.cardholderDetection).toBe("not-found");
+  });
+
+  it("usa not-found quando não há um nome em campo explícito de titular", () => {
+    const statement = parseCardStatement([
+      "Nubank | Visa",
+      "Total da fatura R$ 321,00",
+      "TRANSAÇÕES",
+      "14/09 Loja Boreal R$ 50,00",
+    ].join("\n"));
+
+    expect(statement.cardholder).toBeUndefined();
+    expect(statement.cardholderDetection).toBe("not-found");
+  });
+
+  it("limita a detecção ao cabeçalho sem seção e nunca inclui o nome completo em descrições", () => {
+    const titularBeforePurchase = parseCardStatement([
+      "Fatura mensal",
+      "Titular: Aline Costa",
+      "Loja Aurora R$ 100,00",
+    ].join("\n"));
+    const titularAfterFirstPurchase = parseCardStatement([
+      "Fatura mensal",
+      "Loja Aurora R$ 100,00",
+      "Titular: Aline Costa",
+      "Restaurante Boreal R$ 50,00",
+    ].join("\n"));
+
+    expect(titularBeforePurchase.cardholder).toBe("aline");
+    expect(titularBeforePurchase.expenses).toHaveLength(1);
+    expect(titularBeforePurchase.expenses.map((expense) => expense.source).join(" ")).not.toContain("Aline Costa");
+    expect(titularAfterFirstPurchase.cardholder).toBeUndefined();
+    expect(titularAfterFirstPurchase.cardholderDetection).toBe("not-found");
+    expect(titularAfterFirstPurchase.expenses).toHaveLength(2);
+    expect(titularAfterFirstPurchase.expenses.map((expense) => expense.source).join(" ")).not.toContain("Aline Costa");
+  });
+
   it("não infere instituição ou bandeira pelo nome do estabelecimento", () => {
     const statement = parseCardStatement([
       "Fatura mensal",

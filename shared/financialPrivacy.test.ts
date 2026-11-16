@@ -33,4 +33,16 @@ describe("derived financial privacy", () => {
     expect(safe.description).not.toContain("4321");
     expect(safe.description).toContain("Hotel Exemplo");
   });
+  it("preserves holder enums and an explicit manual unassigned marker in local backups", () => {
+    const data = [
+      { holder: "aline", holderSource: "invoice", amount: 80 },
+      { holder: undefined, holderSource: "manual", amount: 40 },
+    ];
+
+    const safe = sanitizeFinancialRecords(data);
+
+    expect(safe).toEqual(data);
+    expect(safe[0]).toMatchObject({ holder: "aline", holderSource: "invoice" });
+    expect(safe[1]).toMatchObject({ holder: undefined, holderSource: "manual" });
+  });
 });

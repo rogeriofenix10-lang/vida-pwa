@@ -1,7 +1,7 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 vi.mock("./localOcr", () => ({ readDocumentText: vi.fn() }));
 import { readDocumentText } from "./localOcr";
-import { buildStatementEntries, groupExpenses, readFinancialDocument, type FinancialEntry } from "./financeDocuments";
+import { buildStatementEntries, groupExpenses, preserveBlockedStatementData, readFinancialDocument, type FinancialEntry } from "./financeDocuments";
 
 const doc = { id: "doc-a", name: "fatura.pdf", kind: "financeiro", createdAt: "2028-05-01", institution: "Nubank", brand: "Mastercard", money: [{ source: "14/05 HOTEL ALFA R$ 80,00", date: "14/05", amount: 80, category: "Hotel" as const }, { source: "15/05 POSTO BETA R$ 40,00", date: "15/05", amount: 40, category: "Posto de combustível" as const }] };
 beforeEach(() => vi.clearAllMocks());
@@ -15,6 +15,76 @@ describe("statement ledger integration", () => {
     expect(next).toHaveLength(2);
     expect(next.find((item) => item.amount === 80)).toMatchObject({ status: "paid", category: "Outros", id: first[0].id });
     expect(next[0]).toMatchObject({ institution: "Nubank", brand: "Mastercard", purchaseDate: "15/05" });
+  });
+  it("applies an identified invoice holder to its expenses and preserves a reviewed expense override", () => {
+    const imported = buildStatementEntries<FinancialEntry>({ ...doc, holder: "aline" }, []);
+    expect(imported.map((entry) => entry.holder)).toEqual(["aline", "aline"]);
+    expect(imported.map((entry) => entry.holderSource)).toEqual(["invoice", "invoice"]);
+
+    imported[0].holder = "rogerio";
+    imported[0].holderSource = "manual";
+    const reread = buildStatementEntries({ ...doc, holder: "aline", money: [...doc.money].reverse() }, imported);
+    expect(reread.find((entry) => entry.amount === 80)?.holder).toBe("rogerio");
+    expect(reread.find((entry) => entry.amount === 40)?.holder).toBe("aline");
+  });
+  it("does not reassign an expense that was explicitly left without a holder", () => {
+    const imported = buildStatementEntries<FinancialEntry>({ ...doc, holder: "rogerio" }, []);
+    imported[0].holder = undefined;
+    imported[0].holderSource = "manual";
+
+    const reread = buildStatementEntries({ ...doc, holder: "aline" }, imported);
+
+    expect(reread.find((entry) => entry.amount === 80)).toMatchObject({ holder: undefined, holderSource: "manual" });
+    expect(reread.find((entry) => entry.amount === 40)).toMatchObject({ holder: "aline", holderSource: "invoice" });
+  });
+  it("preserves prior period metadata and ownership after an empty or blocked reparse", () => {
+    const previous = {
+      money: doc.money,
+      total: 120,
+      institution: "Nubank",
+      brand: "Mastercard",
+      statementTotal: 160,
+      statementDueAt: "2028-05-17",
+      holder: "rogerio" as const,
+      holderSource: "manual" as const,
+      extractedText: "Titular: Rogério",
+      analysis: "texto extraído",
+      confidence: 0.96,
+      warnings: ["Aviso anterior"],
+    };
+    const attempted = {
+      ...previous,
+      money: [doc.money[1]],
+      total: 40,
+      institution: undefined,
+      brand: undefined,
+      statementTotal: 40,
+      statementDueAt: "2028-06-18",
+      holder: "aline" as const,
+      holderSource: "statement" as const,
+      extractedText: "Titular: Aline",
+      analysis: "OCR novo",
+      confidence: 0.22,
+      warnings: ["Aviso novo"],
+    };
+
+    const preserved = preserveBlockedStatementData(attempted, previous, "Releitura não conciliada");
+
+    expect(preserved).toMatchObject({
+      money: previous.money,
+      total: 120,
+      institution: "Nubank",
+      brand: "Mastercard",
+      statementTotal: 160,
+      statementDueAt: "2028-05-17",
+      holder: "rogerio",
+      holderSource: "manual",
+      extractedText: "Titular: Rogério",
+      confidence: 0.96,
+      warnings: ["Aviso anterior", "Releitura não conciliada"],
+    });
+
+    expect(preserveBlockedStatementData({ ...attempted, statementDueAt: "2028-07-01" }, { ...previous, statementDueAt: undefined }, "Sem vencimento anterior").statementDueAt).toBeUndefined();
   });
   it("does not merge legitimately repeated purchases and groups amounts in cents", () => {
     const entries = buildStatementEntries<FinancialEntry>({ ...doc, money: [doc.money[0], doc.money[0], doc.money[1]] }, []);

@@ -10,6 +10,9 @@ export { redactFinancialIdentifiers } from "./expenseParser";
 export const CARD_BRANDS = ["Visa", "Mastercard", "Elo", "American Express", "Hipercard", "Diners Club", "Discover"] as const;
 export type CardBrand = (typeof CARD_BRANDS)[number];
 
+export type Cardholder = "rogerio" | "aline";
+export type CardholderDetection = "explicit" | "ambiguous" | "not-found";
+
 export const CARD_INSTITUTIONS = [
   "Banco do Brasil",
   "Itaú",
@@ -41,6 +44,8 @@ export type ParsedCardStatement = {
   expenses: ParsedExpense[];
   institution?: CardInstitution;
   brand?: CardBrand;
+  cardholder?: Cardholder;
+  cardholderDetection: CardholderDetection;
   statementTotal?: number;
   statementDueAt?: string;
   warnings: string[];
@@ -118,6 +123,51 @@ function transactionSectionText(text: string): { text: string; header: string; h
     if (active && datedRowPattern.test(line)) transactions.push(line);
   }
   return { text: transactions.join("\n"), header: lines.slice(0, firstMarker).join("\n"), hasSections: true };
+}
+
+const cardholderLabelPattern = /^(?:nome\s+do\s+titular(?:\s+do\s+cartao)?|titular\s+do\s+cartao|titular|nome\s+do\s+portador(?:\s+do\s+cartao)?|portador\s*\/\s*nome\s+do\s+portador|portador(?:\s+do\s+cartao)?|cardholder(?:\s+name)?)(?=$|[\s:：=|/])/i;
+
+function detectCardholderInHeader(text: string): { cardholder?: Cardholder; cardholderDetection: CardholderDetection } {
+  const lines = text.split(/\r?\n/);
+  const structuralBoundary = lines.findIndex(line => sectionMarkerPattern.test(line) || datedRowPattern.test(line));
+  const amountBoundary = firstAmountLineIndex(text);
+  const firstBoundary = structuralBoundary >= 0 ? structuralBoundary : amountBoundary;
+  const headerLines = firstBoundary >= 0 ? lines.slice(0, firstBoundary) : lines;
+  let foundRogerio = false;
+  let foundAline = false;
+
+  headerLines.forEach((line, index) => {
+    const normalizedLine = normalizeForLookup(line).trim().replace(/^[|•*#]+\s*/, "");
+    const label = cardholderLabelPattern.exec(normalizedLine);
+    if (!label) return;
+
+    const inlineValue = normalizedLine.slice(label[0].length).replace(/^[\s:：=|/–—-]+/, "").trim();
+    const value = inlineValue || normalizeForLookup(headerLines[index + 1] ?? "").trim();
+    if (/\brogerio\b/.test(value)) foundRogerio = true;
+    if (/\baline\b/.test(value)) foundAline = true;
+  });
+
+  if (foundRogerio && foundAline) return { cardholderDetection: "ambiguous" };
+  if (foundRogerio) return { cardholder: "rogerio", cardholderDetection: "explicit" };
+  if (foundAline) return { cardholder: "aline", cardholderDetection: "explicit" };
+  return { cardholderDetection: "not-found" };
+}
+
+function stripCardholderFields(text: string): string {
+  const lines = text.split(/\r?\n/);
+  const safeLines: string[] = [];
+  for (let index = 0; index < lines.length; index++) {
+    const normalizedLine = normalizeForLookup(lines[index]).trim().replace(/^[|•*#]+\s*/, "");
+    const label = cardholderLabelPattern.exec(normalizedLine);
+    if (!label) { safeLines.push(lines[index]); continue; }
+
+    const inlineValue = normalizedLine.slice(label[0].length).replace(/^[\s:：=|/–—-]+/, "").trim();
+    if (!inlineValue) {
+      const nextLine = lines[index + 1] ?? "";
+      if (nextLine && !datedRowPattern.test(nextLine) && !sectionMarkerPattern.test(nextLine) && firstAmountLineIndex(nextLine) < 0) index++;
+    }
+  }
+  return safeLines.join("\n");
 }
 
 const summaryTotalLabel = /^\s*(?:(?:valor\s+total\s+(?:da\s+)?fatura|total\s+(?:da\s+)?fatura|total\s+a\s+pagar|valor\s+a\s+pagar)\b)/i;
@@ -281,15 +331,25 @@ function firstAmountLineIndex(text: string): number {
 /** Extrai candidatos determinísticos de uma fatura; dados brutos sensíveis não são devolvidos. */
 export function parseCardStatement(text: string): ParsedCardStatement {
   const selection = transactionSectionText(text);
-  const expenses = parseExpenseLines(selection.text);
+  const lines = text.split(/\r?\n/);
   const firstTransactionIndex = selection.hasSections
-    ? text.split(/\r?\n/).findIndex(line => sectionMarkerPattern.test(line))
-    : firstAmountLineIndex(text);
+    ? lines.findIndex(line => sectionMarkerPattern.test(line))
+    : (() => {
+        const firstDatedIndex = lines.findIndex((line) => datedRowPattern.test(line));
+        return firstDatedIndex >= 0 ? firstDatedIndex : firstAmountLineIndex(text);
+      })();
   const header = selection.hasSections
     ? selection.header
     : firstTransactionIndex >= 0
-      ? text.split(/\r?\n/).slice(0, firstTransactionIndex).join("\n")
+      ? lines.slice(0, firstTransactionIndex).join("\n")
       : text;
+  const transactionText = selection.hasSections
+    ? selection.text
+    : firstTransactionIndex >= 0
+      ? lines.slice(firstTransactionIndex).join("\n")
+      : "";
+  const cardholder = detectCardholderInHeader(header);
+  const expenses = parseExpenseLines(stripCardholderFields(transactionText));
   const metadata = extractHeaderMetadata(redactFinancialIdentifiers(header));
   const statementTotal = extractStatementTotal(redactFinancialIdentifiers(text));
   const statementDue = extractStatementDueAtDetails(text);
@@ -305,6 +365,8 @@ export function parseCardStatement(text: string): ParsedCardStatement {
     expenses,
     ...(metadata.institution ? { institution: metadata.institution } : {}),
     ...(metadata.brand ? { brand: metadata.brand } : {}),
+    ...(cardholder.cardholder ? { cardholder: cardholder.cardholder } : {}),
+    cardholderDetection: cardholder.cardholderDetection,
     ...(statementTotal !== undefined ? { statementTotal } : {}),
     ...(statementDue.date ? { statementDueAt: statementDue.date } : {}),
     warnings,

@@ -1,6 +1,7 @@
 import { readDocumentText, type DocumentReadResult, type OcrProgress } from "./localOcr";
 import { parseCardStatement, redactFinancialIdentifiers } from "@shared/cardStatement";
 import { EXPENSE_CATEGORIES, type ExpenseCategory, type ParsedExpense } from "@shared/expenseParser";
+import type { FinanceHolder } from "./financeOwnership";
 
 export const INCOME_CATEGORIES = [
   "Salário",
@@ -31,12 +32,53 @@ export type FinancialEntry = {
   sourceLineKey?: string;
   institution?: string;
   brand?: string;
+  holder?: FinanceHolder;
+  holderSource?: "invoice" | "manual";
 };
 
 type StatementDocument = {
   id: string; name: string; createdAt: string; kind?: string;
-  money: ParsedExpense[]; institution?: string; brand?: string;
+  money: ParsedExpense[]; institution?: string; brand?: string; holder?: FinanceHolder;
 };
+
+export type FinancialStatementSnapshot = {
+  money?: unknown;
+  total?: number;
+  institution?: string;
+  brand?: string;
+  statementTotal?: number;
+  statementDueAt?: string;
+  holder?: FinanceHolder;
+  holderSource?: "statement" | "manual";
+  extractedText?: string;
+  analysis?: string;
+  confidence?: number;
+  warnings?: string[];
+};
+
+/** A blocked or empty reparse cannot change the date/metadata used to group existing ledger rows. */
+export function preserveBlockedStatementData<T extends FinancialStatementSnapshot>(
+  next: T,
+  previous: T | undefined,
+  warning: string,
+): T {
+  if (!previous) return { ...next, warnings: [...(next.warnings ?? []), warning] } as T;
+  return {
+    ...next,
+    money: previous.money,
+    total: previous.total,
+    institution: previous.institution,
+    brand: previous.brand,
+    statementTotal: previous.statementTotal,
+    statementDueAt: previous.statementDueAt,
+    holder: previous.holder,
+    holderSource: previous.holderSource,
+    extractedText: previous.extractedText,
+    analysis: previous.analysis,
+    confidence: previous.confidence,
+    warnings: [...(previous.warnings ?? []), warning],
+  } as T;
+}
 
 const isReliable = (reading: DocumentReadResult) =>
   Boolean(reading.text.trim()) && (reading.method !== "ocr" || reading.confidence >= 45);
@@ -93,6 +135,7 @@ export function buildStatementEntries<T extends FinancialEntry>(document: Statem
     if (matchIndex < 0) matchIndex = unmatched.findIndex((entry) => !entry.purchaseDate &&
       redactFinancialIdentifiers(entry.description) === redactFinancialIdentifiers(line.source) && entry.amount === line.amount);
     const old = matchIndex >= 0 ? unmatched.splice(matchIndex, 1)[0] : undefined;
+    const manualHolderOverride = old?.holderSource === "manual" || (old?.holder !== undefined && old?.holderSource === undefined);
     let id = old?.id;
     if (!id) {
       let index = 0;
@@ -109,6 +152,8 @@ export function buildStatementEntries<T extends FinancialEntry>(document: Statem
       sourceDocumentId: document.id, purchaseDate: old?.purchaseDate ?? line.date,
       sourceLineKey: signature,
       institution: old?.institution ?? document.institution, brand: old?.brand ?? document.brand,
+      holder: manualHolderOverride ? old?.holder : document.holder,
+      holderSource: manualHolderOverride ? "manual" : "invoice",
     } as T;
   });
   // If any old row cannot be reconciled, leave the ledger untouched for manual review.
