@@ -5,6 +5,7 @@ import { buildStatementEntries, groupExpenses, preserveBlockedStatementData, rea
 
 const doc = { id: "doc-a", name: "fatura.pdf", kind: "financeiro", createdAt: "2028-05-01", institution: "Nubank", brand: "Mastercard", money: [{ source: "14/05 HOTEL ALFA R$ 80,00", date: "14/05", amount: 80, category: "Hotel" as const }, { source: "15/05 POSTO BETA R$ 40,00", date: "15/05", amount: 40, category: "Posto de combustível" as const }] };
 beforeEach(() => vi.clearAllMocks());
+const ledgerRow = (id: string, amount: number): FinancialEntry => ({ id, type: "expense", description: "Compra", amount, category: "Hotel", status: "open", createdAt: "2028-05-01", dueAt: "" });
 describe("statement ledger integration", () => {
   it("reprocesses without duplicates and preserves manually reviewed category/status", () => {
     const first = buildStatementEntries<FinancialEntry>(doc, []);
@@ -90,6 +91,14 @@ describe("statement ledger integration", () => {
     const entries = buildStatementEntries<FinancialEntry>({ ...doc, money: [doc.money[0], doc.money[0], doc.money[1]] }, []);
     expect(new Set(entries.map((item) => item.id)).size).toBe(3);
     expect(groupExpenses(entries).find((item) => item.category === "Hotel")).toMatchObject({ total: 160, count: 2 });
+  });
+  it("sums category values as integer cents and ignores invalid legacy amounts", () => {
+    const grouped = groupExpenses([
+      ledgerRow("one", 0.1),
+      ledgerRow("two", 0.2),
+      ledgerRow("invalid", Number.NaN),
+    ]);
+    expect(grouped).toEqual([{ category: "Hotel", total: 0.3, count: 2, entries: expect.any(Array) }]);
   });
   it("keeps the invoice due date separate from purchases while preserving manually edited due dates", () => {
     const datedDocument = { ...doc, statementDueAt: "2028-05-17" };

@@ -84,12 +84,18 @@ export function inferExpenseCategory(description: string): ExpenseCategory {
   return found.length === 1 ? found[0][0] : "Outros";
 }
 
-const summaryLine = /^\s*(?:(?:valor|saldo)\s+(?:total|anterior|atual)\b|(?:sub\s*total|total(?:\s+(?:da\s+)?fatura|\s+de\b|\s+das\b|\s+a\s+pagar\b)?|limite(?:\s+dispon[ií]vel)?|saldo(?:\s+anterior|\s+em\s+atraso)?|pagamento\s+m[ií]nimo|troco\b|resumo\b|pr[oó]ximas\s+faturas|fatura\b|valor\s+a\s+pagar)\b)/i;
-const nonExpenseLine = /^\s*(?:(?:\d{1,2}\/\d{1,2}(?:\/\d{2,4})?|\d{1,2}\s+(?:jan|fev|mar|abr|mai|jun|jul|ago|set|out|nov|dez))\s+)?(?:pagamentos?\b|cr[eé]dito\b|estorno\b|devolu[cç][aã]o\b|saldo\s+em\s+atraso\b|encerramento\s+de\s+d[ií]vida\b|transfer[eê]ncia\s+(?:de\s+)?saldo\b)/i;
 const monthPattern = "jan|fev|mar|abr|mai|jun|jul|ago|set|out|nov|dez";
-const datePattern = new RegExp(`\\b(\\d{2}\\/\\d{2}(?:\\/\\d{2,4})?|\\d{1,2}\\s+(?:${monthPattern})\\.?)\\b`, "i");
-const allDatesPattern = new RegExp(`\\b\\d{2}\\/\\d{2}(?:\\/\\d{2,4})?\\b|\\b\\d{1,2}\\s+(?:${monthPattern})\\.?\\b`, "gi");
-const amountPattern = /(?<![\w])((?:(?:[-−]\s*)?(?:R\$|BRL)\s*(?:[-−]\s*)?|(?:R\$|BRL)\s*(?:[-−]\s*)?|[-−]\s*)?)(\d{1,3}(?:\.\d{3})+(?:,\s?\d{1,2})?|\d+(?:[,.]\s?\d{1,2})?)(?![\d/.,])/gi;
+const transactionDatePrefix = /^(?:\d{4}-\d{2}-\d{2}\b|\d{1,2}\/\d{1,2}(?:\/\d{2,4})?\b|\d{1,2}\s+(?:jan|fev|mar|abr|mai|jun|jul|ago|set|out|nov|dez)\.?)\s*/i;
+const summaryLine = /^\s*(?:(?:valor|saldo)\s+(?:total|anterior|atual)\b|(?:sub\s*total|tot(?:al|ais)(?:\s+(?:da\s+)?fatura|\s+de\b|\s+das\b|\s+a\s+pagar\b)?|limite(?:\s+dispon[ií]vel)?|saldo(?:\s+anterior|\s+em\s+atraso)?|pagamento\s+m[ií]nimo|troco\b|resumo\b|pr[oó]ximas\s+faturas|fatura\b|valor\s+a\s+pagar)\b)/i;
+const nonExpenseLine = /^\s*(?:pagamentos?\b|cr[eé]ditos?\b|estornos?\b|devolu[cç](?:[aã]o|[õo]es)\b|saldo(?:\s+em\s+atraso|\s+anterior)?\b|encerramento\s+de\s+d[ií]vida\b|transfer[eê]ncia\s+(?:de\s+)?saldo\b)/i;
+const datePattern = new RegExp(`\\b(\\d{4}-\\d{2}-\\d{2}|\\d{1,2}\\/\\d{1,2}(?:\\/\\d{2,4})?|\\d{1,2}\\s+(?:${monthPattern})\\.?)\\b`, "i");
+const allDatesPattern = new RegExp(`\\b\\d{4}-\\d{2}-\\d{2}\\b|\\b\\d{1,2}\\/\\d{1,2}(?:\\/\\d{2,4})?\\b|\\b\\d{1,2}\\s+(?:${monthPattern})\\.?\\b`, "gi");
+const amountValuePattern = String.raw`(?:\d{1,3}(?:\.\d{3})+(?:,\s?\d{1,2})?|\d{1,3}(?:,\d{3})+(?:\.\s?\d{1,2})?|\d+(?:[,.]\s?\d{1,2})?)`;
+const amountPattern = new RegExp(
+  String.raw`(?<![\w])((?:[-−]\s*)?(?:R\$|BRL\b)\s*(?:[-−]\s*)?|(?:[-−]\s*)?(?:US\$|USD\b|EUR\b|GBP\b|CAD\b|AUD\b|JPY\b|CHF\b|ARS\b|MXN\b|COP\b|CLP\b|PEN\b|C\$|A\$|S\$|HK\$|\$|€|£|¥)\s*(?:[-−]\s*)?|[-−]\s*)?(${amountValuePattern})(?![\d/.,])`,
+  "gi",
+);
+const currencySuffixPattern = /^\s*(R\$|BRL\b|US\$|USD\b|EUR\b|GBP\b|CAD\b|AUD\b|JPY\b|CHF\b|ARS\b|MXN\b|COP\b|CLP\b|PEN\b|C\$|A\$|S\$|HK\$|\$|€|£|¥)/i;
 
 export function parseBrazilianAmount(raw: string): number {
   let value = raw.trim().replace(/^(?:[-−]\s*)?(?:R\$|BRL)\s*/i, "").replace(/^(?:[-−]\s*)/, "").replace(/\s/g, "");
@@ -113,24 +119,65 @@ export function parseBrazilianAmount(raw: string): number {
   return isNegative ? -amount : amount;
 }
 
-type InternalParse = { expenses: ParsedExpense[]; firstSourceIndex?: number };
+type AmountMatch = { amount: number; index: number; end: number; currency: "brl" | "foreign" | "none" };
+type InternalParse = { expenses: ParsedExpense[]; firstSourceIndex?: number; ambiguousAmountRows: number };
 
-function amountMatches(row: string): Array<{ amount: number; index: number; end: number }> {
-  const withoutDates = row
-    .replace(allDatesPattern, " ")
-    .replace(/\bparcela\s*:?\s*\d{1,2}\s*\/\s*\d{1,2}\b/gi, " [parcela] ")
+function amountSearchText(row: string): string {
+  return row
+    .replace(allDatesPattern, match => " ".repeat(match.length))
+    .replace(/\bparcela\s*:?\s*\d{1,2}\s*\/\s*\d{1,2}\b/gi, match => " ".repeat(match.length))
     .replace(/([\p{L}\]])\s+-\s+(?=(?:R\$|BRL)\s*\d)/gu, "$1 · ");
-  const result: Array<{ amount: number; index: number; end: number }> = [];
+}
+
+function amountMatches(row: string): AmountMatch[] {
+  const withoutDates = amountSearchText(row);
+  const result: AmountMatch[] = [];
   amountPattern.lastIndex = 0;
   for (const match of withoutDates.matchAll(amountPattern)) {
     const prefix = match[1] ?? "";
     const amountText = match[2] ?? "";
     const end = (match.index ?? 0) + match[0].length;
     if (withoutDates.slice(end).trimStart().startsWith("%")) continue;
-    const amount = parseBrazilianAmount(`${prefix}${amountText}`);
-    if (Number.isFinite(amount)) result.push({ amount, index: match.index ?? 0, end });
+    const suffixCurrency = currencySuffixPattern.exec(withoutDates.slice(end))?.[1] ?? "";
+    const currencyToken = `${prefix} ${suffixCurrency}`;
+    const currency = /R\$|BRL/i.test(currencyToken)
+      ? "brl"
+      : /US\$|USD|EUR|GBP|CAD|AUD|JPY|CHF|ARS|MXN|COP|CLP|PEN|C\$|A\$|S\$|HK\$|\$|€|£|¥/i.test(currencyToken)
+        ? "foreign"
+        : "none";
+    const amount = currency === "foreign" ? Number.NaN : parseBrazilianAmount(`${prefix}${amountText}`);
+    if (currency === "foreign" || Number.isFinite(amount)) {
+      result.push({ amount, index: match.index ?? 0, end, currency });
+    }
   }
   return result;
+}
+
+function selectAmount(row: string, matches: AmountMatch[]): { match?: AmountMatch; ambiguous: boolean } {
+  const searchText = amountSearchText(row);
+  const labels = /\b(?:total\s+cobrado|valor\s+da\s+compra)\b\s*[:：=]?\s*/gi;
+  const labeledMatches = new Set<AmountMatch>();
+  for (const label of searchText.matchAll(labels)) {
+    const labelEnd = (label.index ?? 0) + label[0].length;
+    for (const candidate of matches) {
+      if (candidate.index < labelEnd) continue;
+      if (/^[\s:：=|–—-]*$/.test(searchText.slice(labelEnd, candidate.index))) labeledMatches.add(candidate);
+    }
+  }
+  if (labeledMatches.size === 1) {
+    const match = [...labeledMatches][0];
+    if (match.currency !== "foreign" && Number.isFinite(match.amount)) return { match, ambiguous: false };
+  }
+
+  const explicitBrl = matches.filter(match => match.currency === "brl" && Number.isFinite(match.amount));
+  const otherAmountsAreForeign = matches.every(match => match.currency === "brl" || match.currency === "foreign");
+  if (explicitBrl.length === 1 && matches.length > 1 && otherAmountsAreForeign) {
+    return { match: explicitBrl[0], ambiguous: false };
+  }
+  if (matches.length === 1 && matches[0].currency !== "foreign" && Number.isFinite(matches[0].amount)) {
+    return { match: matches[0], ambiguous: false };
+  }
+  return { ambiguous: matches.length > 1 };
 }
 
 function isInterestPercentageLine(row: string): boolean {
@@ -150,10 +197,12 @@ function parseExpenseLinesInternal(text: string): InternalParse {
   let previous = "";
   let previousIndex = -1;
   let firstSourceIndex: number | undefined;
+  let ambiguousAmountRows = 0;
 
   for (const { text: row, index } of rows) {
     if (row.replace(removedIdentifier, "").trim() === "") continue;
-    if (summaryLine.test(row) || nonExpenseLine.test(row) || isInterestPercentageLine(row)) {
+    const rowWithoutDate = row.replace(transactionDatePrefix, "");
+    if (summaryLine.test(rowWithoutDate) || nonExpenseLine.test(rowWithoutDate) || isInterestPercentageLine(row)) {
       previous = "";
       previousIndex = -1;
       continue;
@@ -166,7 +215,14 @@ function parseExpenseLinesInternal(text: string): InternalParse {
       continue;
     }
 
-    const match = matches[matches.length - 1];
+    const selection = selectAmount(row, matches);
+    if (!selection.match) {
+      if (selection.ambiguous) ambiguousAmountRows++;
+      previous = "";
+      previousIndex = -1;
+      continue;
+    }
+    const match = selection.match;
     if (match.amount <= 0) {
       previous = "";
       previousIndex = -1;
@@ -186,10 +242,16 @@ function parseExpenseLinesInternal(text: string): InternalParse {
     previous = "";
     previousIndex = -1;
   }
-  return { expenses: result, firstSourceIndex };
+  return { expenses: result, firstSourceIndex, ambiguousAmountRows };
 }
 
-/** Candidates for review, not an accounting opinion. One final amount per transaction row. */
+/** Candidates for review, not an accounting opinion; ambiguous multi-value rows are omitted. */
 export function parseExpenseLines(text: string): ParsedExpense[] {
   return parseExpenseLinesInternal(text).expenses;
+}
+
+/** Returns only generic diagnostics; no ambiguous row text or values are exposed. */
+export function parseExpenseLinesWithDiagnostics(text: string): { expenses: ParsedExpense[]; ambiguousAmountRows: number } {
+  const { expenses, ambiguousAmountRows } = parseExpenseLinesInternal(text);
+  return { expenses, ambiguousAmountRows };
 }

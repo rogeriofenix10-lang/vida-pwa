@@ -58,6 +58,13 @@ export function isFinancialDocument(document: {
   return document.kind === "financeiro" || document.folder === "Financeiro";
 }
 
+/** Financial originals remain stored for FinanceHub but are not listed in the document library. */
+export function filterDocumentLibraryItems<T extends { kind?: string; folder?: string; classificationKind?: string }>(
+  documents: T[],
+): T[] {
+  return documents.filter((document) => isContractDocument(document) || !isFinancialDocument(document));
+}
+
 /** A content-only digest used for local duplicate detection; it includes no filename. */
 export async function documentFileHash(file: Blob): Promise<string> {
   const digest = await crypto.subtle.digest("SHA-256", await file.arrayBuffer());

@@ -1,5 +1,6 @@
 import { strFromU8, strToU8, unzipSync, zipSync } from "fflate";
 import { sanitizeFinancialRecords } from "@shared/financialPrivacy";
+import { isContractDocument, isFinancialDocument } from "./documentLibrary";
 
 // Limite defensivo por arquivo local; mantém faturas usuais e evita leituras sem limite.
 export const MAX_LOCAL_FILE_BYTES = 50 * 1024 * 1024;
@@ -138,6 +139,117 @@ export async function writeLocalBatch(values: Record<string, unknown>): Promise<
       db.close();
       window.dispatchEvent(new Event("iris-local-changed"));
       resolve();
+    };
+  });
+}
+
+/** Clear only the local financial ledger, atomically verifying the count shown to the user. */
+export async function clearFinancialLedgerIfCount(expectedCount: number): Promise<number> {
+  if (!Number.isSafeInteger(expectedCount) || expectedCount < 0) {
+    throw new Error("A quantidade esperada de lançamentos é inválida.");
+  }
+  if (typeof window === "undefined" || !("indexedDB" in window)) {
+    throw new Error("O armazenamento financeiro local não está disponível.");
+  }
+  const db = await openDb();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(STORE, "readwrite");
+    const store = transaction.objectStore(STORE);
+    const request = store.get("irisFinances");
+    let removedCount = 0;
+    let failure: Error | undefined;
+    request.onerror = () => {
+      failure = request.error ?? new Error("Não foi possível verificar o histórico financeiro.");
+      transaction.abort();
+    };
+    request.onsuccess = () => {
+      const current = request.result ?? [];
+      if (!Array.isArray(current) || current.length !== expectedCount) {
+        failure = new Error("A quantidade de lançamentos mudou desde a confirmação; nenhum registro foi apagado. Atualize a tela e confira novamente.");
+        transaction.abort();
+        return;
+      }
+      removedCount = current.length;
+      try {
+        store.put([], "irisFinances");
+      } catch (error) {
+        failure = error instanceof Error ? error : new Error("Não foi possível apagar o histórico financeiro.");
+        transaction.abort();
+      }
+    };
+    transaction.onabort = () => {
+      db.close();
+      reject(failure ?? transaction.error ?? new Error("A exclusão foi interrompida; o histórico anterior foi preservado."));
+    };
+    transaction.onerror = () => {
+      db.close();
+      reject(failure ?? transaction.error ?? new Error("Falha no armazenamento local; o histórico anterior foi preservado."));
+    };
+    transaction.oncomplete = () => {
+      db.close();
+      window.dispatchEvent(new Event("iris-local-changed"));
+      resolve(removedCount);
+    };
+  });
+}
+
+/** Remove only archived finance documents after an exact-count check; ledger entries are untouched. */
+export async function clearFinancialDocumentsIfCount(expectedCount: number): Promise<number> {
+  if (!Number.isSafeInteger(expectedCount) || expectedCount < 0) {
+    throw new Error("A quantidade esperada de documentos financeiros é inválida.");
+  }
+  if (typeof window === "undefined" || !("indexedDB" in window)) {
+    throw new Error("O arquivo local de documentos não está disponível.");
+  }
+  const db = await openDb();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(STORE, "readwrite");
+    const store = transaction.objectStore(STORE);
+    const request = store.get("irisDocuments");
+    let removedCount = 0;
+    let failure: Error | undefined;
+    request.onerror = () => {
+      failure = request.error ?? new Error("Não foi possível verificar os documentos arquivados.");
+      transaction.abort();
+    };
+    request.onsuccess = () => {
+      const current = request.result ?? [];
+      if (!Array.isArray(current)) {
+        failure = new Error("O arquivo local de documentos não tem o formato esperado; nenhum arquivo foi apagado.");
+        transaction.abort();
+        return;
+      }
+      const financial = current.filter((document) =>
+        isFinancialDocument(document) && !isContractDocument(document),
+      );
+      if (financial.length !== expectedCount) {
+        failure = new Error("A quantidade de documentos mudou desde a confirmação; nenhum arquivo foi apagado. Atualize a tela e confira novamente.");
+        transaction.abort();
+        return;
+      }
+      removedCount = financial.length;
+      const kept = current.filter((document) =>
+        !isFinancialDocument(document) || isContractDocument(document),
+      );
+      try {
+        store.put(kept, "irisDocuments");
+      } catch (error) {
+        failure = error instanceof Error ? error : new Error("Não foi possível apagar os documentos financeiros.");
+        transaction.abort();
+      }
+    };
+    transaction.onabort = () => {
+      db.close();
+      reject(failure ?? transaction.error ?? new Error("A exclusão foi interrompida; os documentos foram preservados."));
+    };
+    transaction.onerror = () => {
+      db.close();
+      reject(failure ?? transaction.error ?? new Error("Falha no armazenamento local; os documentos foram preservados."));
+    };
+    transaction.oncomplete = () => {
+      db.close();
+      window.dispatchEvent(new Event("iris-local-changed"));
+      resolve(removedCount);
     };
   });
 }

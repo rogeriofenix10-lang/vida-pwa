@@ -1,6 +1,6 @@
 import {
   parseBrazilianAmount,
-  parseExpenseLines,
+  parseExpenseLinesWithDiagnostics,
   redactFinancialIdentifiers,
   type ParsedExpense,
 } from "./expenseParser";
@@ -52,7 +52,7 @@ export type ParsedCardStatement = {
 };
 
 const monthNames = "JAN|FEV|MAR|ABR|MAI|JUN|JUL|AGO|SET|OUT|NOV|DEZ";
-const datedRowPattern = new RegExp(`^\\s*(?:\\d{1,2}\\s+(?:${monthNames})\\b|\\d{2}\\/\\d{2}(?:\\/\\d{2,4})?\\b)`, "i");
+const datedRowPattern = new RegExp(`^\\s*(?:\\d{1,2}\\s+(?:${monthNames})\\b|\\d{4}-\\d{2}-\\d{2}\\b|\\d{1,2}\\/\\d{1,2}(?:\\/\\d{2,4})?\\b)`, "i");
 const sectionStartPattern = /^\s*(?:transa[cç][õo]es\b|compras\b)/i;
 const sectionEndPattern = /^\s*(?:resumo\b|pr[oó]ximas\s+faturas\b|limites\s+dispon[ií]veis\b|valor\s+m[aá]ximo\s+para\s+transa[cç][õo]es\b|alternativas\s+de\s+pagamento\b)/i;
 const sectionMarkerPattern = /^\s*(?:transa[cç][õo]es\b|compras\s*(?:\/\s*pagamentos?)?\b)/i;
@@ -171,16 +171,58 @@ function stripCardholderFields(text: string): string {
 }
 
 const summaryTotalLabel = /^\s*(?:(?:valor\s+total\s+(?:da\s+)?fatura|total\s+(?:da\s+)?fatura|total\s+a\s+pagar|valor\s+a\s+pagar)\b)/i;
-const currencyAmountPattern = /(?:[-−]\s*)?(?:R\$|BRL)\s*(?:[-−]\s*)?\d{1,3}(?:\.\d{3})*(?:,\s?\d{1,2})?|(?:[-−]\s*)?\d{1,3}(?:\.\d{3})*(?:,\s?\d{1,2})?/gi;
+const statementAmountValue = String.raw`(?:\d{1,3}(?:\.\d{3})+(?:,\s?\d{1,2})?|\d+(?:[,.]\s?\d{1,2})?)`;
+const currencyAmountPattern = new RegExp(
+  String.raw`(?<![\w\d])((?:[-−]\s*)?(?:R\$|BRL\b)\s*(?:[-−]\s*)?|[-−]\s*)?(${statementAmountValue})(?![\d/.,])`,
+  "gi",
+);
 
 function extractStatementTotal(text: string): number | undefined {
   const lines = text.split(/\r?\n/);
-  for (const line of lines) {
+  const firstSection = lines.findIndex(line => sectionMarkerPattern.test(line));
+  const firstDatedRow = lines.findIndex(line => datedRowPattern.test(line));
+  const firstTransaction = firstSection >= 0 ? firstSection : firstDatedRow;
+  let inTransactions = false;
+  let inSummary = false;
+  let inAlternatives = false;
+
+  for (let index = 0; index < lines.length; index++) {
+    const line = lines[index];
+    if (sectionStartPattern.test(line)) {
+      inTransactions = true;
+      inSummary = false;
+      inAlternatives = false;
+      continue;
+    }
+    if (inTransactions) {
+      if (!sectionEndPattern.test(line)) continue;
+      inTransactions = false;
+      inSummary = /^\s*resumo\b/i.test(line);
+      inAlternatives = /^\s*alternativas\s+de\s+pagamento\b/i.test(line);
+      continue;
+    }
+    if (/^\s*alternativas\s+de\s+pagamento\b/i.test(line)) {
+      inAlternatives = true;
+      inSummary = false;
+      continue;
+    }
+    if (/^\s*resumo\b/i.test(line)) {
+      inSummary = true;
+      inAlternatives = false;
+      continue;
+    }
+    if (/^\s*(?:pr[oó]ximas\s+faturas|limites\s+dispon[ií]veis|valor\s+m[aá]ximo\s+para\s+transa[cç][õo]es)\b/i.test(line)) {
+      inSummary = false;
+      inAlternatives = false;
+      continue;
+    }
+
+    const inHeader = firstTransaction < 0 || index < firstTransaction;
+    if (inAlternatives || (!inHeader && !inSummary) || datedRowPattern.test(line)) continue;
     if (!summaryTotalLabel.test(line)) continue;
     const matches = [...line.matchAll(currencyAmountPattern)];
-    // Linhas de opções de parcelamento podem ter várias colunas e não representam o total da fatura.
     if (matches.length !== 1) continue;
-    const amount = parseBrazilianAmount(matches[0][0]);
+    const amount = parseBrazilianAmount(`${matches[0][1] ?? ""}${matches[0][2] ?? ""}`);
     if (Number.isFinite(amount) && amount > 0) return amount;
   }
   return undefined;
@@ -349,7 +391,8 @@ export function parseCardStatement(text: string): ParsedCardStatement {
       ? lines.slice(firstTransactionIndex).join("\n")
       : "";
   const cardholder = detectCardholderInHeader(header);
-  const expenses = parseExpenseLines(stripCardholderFields(transactionText));
+  const expenseParse = parseExpenseLinesWithDiagnostics(stripCardholderFields(transactionText));
+  const expenses = expenseParse.expenses;
   const metadata = extractHeaderMetadata(redactFinancialIdentifiers(header));
   const statementTotal = extractStatementTotal(redactFinancialIdentifiers(text));
   const statementDue = extractStatementDueAtDetails(text);
@@ -359,6 +402,7 @@ export function parseCardStatement(text: string): ParsedCardStatement {
   if (selection.hasSections) warnings.push("Foram consideradas somente linhas datadas nas seções de transações/compras; pagamentos e continuações não são despesas.");
   if (statementDue.conflict) warnings.push("Foram encontrados vencimentos explícitos divergentes; o vencimento da fatura não foi definido.");
   if (statementDue.invalid) warnings.push("Uma data de vencimento explícita inválida foi ignorada.");
+  if (expenseParse.ambiguousAmountRows > 0) warnings.push("Uma ou mais linhas com múltiplos valores sem critério confiável foram ignoradas.");
   if (expenses.length === 0) warnings.push("Nenhuma despesa de compra reconhecível foi encontrada para revisão.");
 
   return {

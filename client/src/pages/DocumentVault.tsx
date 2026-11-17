@@ -21,6 +21,7 @@ import { redactFinancialIdentifiers } from "@shared/cardStatement";
 import {
   classifyDocument,
   documentFileHash,
+  filterDocumentLibraryItems,
   folderForClassification,
   isContractDocument,
   isFinancialDocument,
@@ -128,6 +129,7 @@ export default function DocumentVault() {
   const [month, setMonth] = useState("all");
   const [message, setMessage] = useState("");
   const [ocrId, setOcrId] = useState<string | null>(null);
+  const libraryItems = useMemo(() => filterDocumentLibraryItems(items), [items]);
 
   useEffect(() => {
     let active = true;
@@ -162,6 +164,8 @@ export default function DocumentVault() {
     let archived = 0;
     let duplicates = 0;
     let failures = 0;
+    let financialRouted = 0;
+    let financialArchived = 0;
     const rejectedForSize: string[] = [];
     const knownHashes = new Set(
       currentItems.map((item) => item.hash).filter((hash): hash is string => Boolean(hash)),
@@ -190,6 +194,10 @@ export default function DocumentVault() {
       knownHashes.add(hash);
 
       const initialClassification = classifyDocument(file, "");
+      if (initialClassification === "financeiro") {
+        financialRouted += 1;
+        continue;
+      }
       const kind = kindForClassification(initialClassification);
       const record: DocumentRecord = {
         id: crypto.randomUUID(),
@@ -238,6 +246,7 @@ export default function DocumentVault() {
         const reading = await readDocumentText(file, onProgress);
         const classification = classifyDocument(file, reading.text);
         const resultKind = kindForClassification(classification);
+        if (resultKind === "financeiro") financialArchived += 1;
         const reliable = analysisIsReliable(reading);
         const updated: DocumentRecord = {
           ...record,
@@ -286,17 +295,19 @@ export default function DocumentVault() {
         ? `${rejectedForSize.length} arquivo(s) acima de 50 MB recusado(s) antes de leitura e arquivamento: ${rejectedForSize.slice(0, 3).join(", ")}${rejectedForSize.length > 3 ? "…" : ""}`
         : "",
       failures ? `${failures} falha(s) individual(is); os originais arquivados continuam disponíveis` : "",
+      financialRouted ? `${financialRouted} arquivo(s) identificado(s) como financeiro(s) pelo nome; importe em Finanças, não na Biblioteca` : "",
+      financialArchived ? `${financialArchived} arquivo(s) financeiro(s) identificado(s) no conteúdo; original mantido localmente e oculto desta Biblioteca. Use Finanças para analisar` : "",
     ].filter(Boolean);
     setMessage(notices.join("; ") + ".");
   };
 
   const availableMonths = useMemo(
-    () => [...new Set(items.map((item) => item.createdAt.slice(0, 7)))].sort().reverse(),
-    [items],
+    () => [...new Set(libraryItems.map((item) => item.createdAt.slice(0, 7)))].sort().reverse(),
+    [libraryItems],
   );
   const filtered = useMemo(
     () =>
-      items.filter((item) =>
+      libraryItems.filter((item) =>
         (tab === "todos" ||
           (tab === "saude" && item.kind === "saude") ||
           (tab === "contratos" && isContractDocument(item)) ||
@@ -304,7 +315,7 @@ export default function DocumentVault() {
         (month === "all" || item.createdAt.slice(0, 7) === month) &&
         item.name.toLowerCase().includes(query.toLowerCase()),
       ),
-    [items, tab, query, month],
+    [libraryItems, tab, query, month],
   );
 
   const confirmDocument = async (id: string) => {
@@ -453,13 +464,13 @@ export default function DocumentVault() {
     }
   };
 
-  const exams = [...items.filter((item) => item.kind === "saude")].sort(
+  const exams = [...libraryItems.filter((item) => item.kind === "saude")].sort(
     (a, b) => b.createdAt.localeCompare(a.createdAt),
   );
   const latest = exams[0];
   const previous = exams[1];
-  const contractCount = items.filter(isContractDocument).length;
-  const reviewCount = items.filter(
+  const contractCount = libraryItems.filter(isContractDocument).length;
+  const reviewCount = libraryItems.filter(
     (item) => !isFinancialDocument(item) && item.reviewStatus === "pending",
   ).length;
 
@@ -474,7 +485,7 @@ export default function DocumentVault() {
           <h1>Documentos e contratos</h1>
           <p>
             Arquive, organize, leia e baixe neste dispositivo. Contratos têm uma pasta própria;
-            faturas e extratos são analisados no módulo Finanças.
+            faturas e extratos não são listados aqui e são geridos no módulo Finanças.
           </p>
         </div>
         <div className="document-trust">
@@ -508,7 +519,7 @@ export default function DocumentVault() {
 
       <div className="document-tabs">
         <button className={tab === "todos" ? "active" : ""} onClick={() => setTab("todos")}>
-          Todos <span>{items.length}</span>
+          Todos <span>{libraryItems.length}</span>
         </button>
         <button className={tab === "saude" ? "active" : ""} onClick={() => setTab("saude")}>
           <FolderHeart size={15} /> Exames <span>{exams.length}</span>

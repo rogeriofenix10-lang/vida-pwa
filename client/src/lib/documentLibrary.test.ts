@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { sanitizeFinancialRecords } from "@shared/financialPrivacy";
 import {
   classifyDocument,
+  filterDocumentLibraryItems,
   folderForClassification,
   isContractDocument,
   isFinancialDocument,
@@ -51,6 +52,21 @@ describe("document library classification", () => {
     expect(isContractDocument(contract)).toBe(true);
     expect(isFinancialDocument(contract)).toBe(false);
     expect(isFinancialDocument({ kind: "financeiro", folder: "Financeiro" })).toBe(true);
+  });
+
+  it("hides financial originals from the library view without mutating stored records or hiding contracts", () => {
+    const contract = { id: "contract", kind: "geral", folder: "Contratos" };
+    const general = { id: "general", kind: "geral", folder: "Documentos" };
+    const financial = { id: "invoice", kind: "financeiro", folder: "Financeiro", money: [{ amount: 10 }] };
+    const misfiledContract = { id: "legacy-contract", kind: "financeiro", folder: "Financeiro", classificationKind: "contrato" };
+    const stored = [contract, general, financial, misfiledContract];
+
+    const visible = filterDocumentLibraryItems(stored);
+
+    expect(visible).toEqual([contract, general, misfiledContract]);
+    expect(stored).toHaveLength(4);
+    expect(stored[2].money).toEqual([{ amount: 10 }]);
+    expect(visible[0]).toBe(contract);
   });
 
   it("retains the contract folder and legacy Blob/storage key through privacy sanitization", () => {

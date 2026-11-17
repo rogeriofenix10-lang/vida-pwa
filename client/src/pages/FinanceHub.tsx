@@ -1,26 +1,60 @@
-import { useEffect, useMemo, useState } from "react";
-import { ArrowLeft, CalendarDays, Check, ChevronLeft, ChevronRight, Download, FileText, Pencil, Plus, Receipt, Search, Trash2, Upload, WalletCards, X } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { ArrowLeft, CalendarDays, Check, ChevronLeft, ChevronRight, Download, FileText, Loader2, Mic, MicOff, Pencil, Plus, Receipt, Search, Sparkles, Trash2, Upload, Volume2, WalletCards, X } from "lucide-react";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
-import { assertLocalFileSize, csvCell, downloadBlob, downloadJson, readLocal, writeLocal, writeLocalBatch } from "@/lib/irisLocalStore";
+import { assertLocalFileSize, clearFinancialDocumentsIfCount, clearFinancialLedgerIfCount, csvCell, downloadBlob, downloadJson, readLocal, writeLocal, writeLocalBatch } from "@/lib/irisLocalStore";
+import { isContractDocument, isFinancialDocument } from "@/lib/documentLibrary";
 import { buildStatementEntries, financialFileHash, groupExpenses, INCOME_CATEGORIES, preserveBlockedStatementData, readFinancialDocument, type FinanceCategory, type FinancialEntry } from "@/lib/financeDocuments";
 import { financeHolderLabel, matchesFinanceHolder, parseFinanceHolder, propagateDocumentHolder, type FinanceHolder, type FinanceHolderFilter } from "@/lib/financeOwnership";
 import { buildMonthlySeries, filterEntriesByMonth, formatPeriodLabel, getDocumentMonth, getEntryPeriod, localToday, summarizeEntries } from "@/lib/financePeriods";
+import { buildFinanceAnalysisAggregate } from "@/lib/financeAnalysis";
 import FinanceMonthlyChart from "@/components/FinanceMonthlyChart";
 import { EXPENSE_CATEGORIES, parseBrazilianAmount, type ExpenseCategory } from "@shared/expenseParser";
 import { extractStatementDueAt, redactFinancialIdentifiers } from "@shared/cardStatement";
+import { askIrisWorker } from "@/lib/irisWorker";
 import "./finance-hub.css";
 
 type Entry = FinancialEntry & { referenceDate?: string; holder?: FinanceHolder };
+type FinanceLine = { category: ExpenseCategory; amount: number; source: string; date?: string };
+type PendingFinanceReview = {
+  money: FinanceLine[];
+  total: number;
+  extractedText: string;
+  analysis: StoredFinanceDocument["analysis"];
+  confidence: number;
+  warnings: string[];
+  institution?: string;
+  brand?: string;
+  statementTotal?: number;
+  statementDueAt?: string;
+  holder?: FinanceHolder;
+  holderSource?: StoredFinanceDocument["holderSource"];
+};
 type StoredFinanceDocument = {
   id: string; name: string; mime: string; size: number; folder: string; kind: "saude" | "financeiro" | "geral"; createdAt: string;
   extractedText: string; analysis: "texto extraído" | "arquivado · OCR necessário" | "arquivado · formato não textual"; total?: number;
-  money: Array<{ category: ExpenseCategory; amount: number; source: string; date?: string }>; markers: Record<string, number>;
+  money: FinanceLine[]; markers: Record<string, number>;
   hash: string; reviewStatus: "pending" | "confirmed"; confidence: number; blob?: Blob; processing?: boolean; processingError?: string;
   institution?: string; brand?: string; statementTotal?: number; statementDueAt?: string; warnings?: string[];
-  holder?: FinanceHolder; holderSource?: "statement" | "manual";
+  classificationKind?: string;
+  holder?: FinanceHolder; holderSource?: "statement" | "manual"; pendingReview?: PendingFinanceReview;
 };
 type Draft = { type: Entry["type"]; description: string; amount: string; category: FinanceCategory; status: Entry["status"]; referenceDate: string; dueAt: string; holder?: FinanceHolder; manualHolderOverride: boolean };
+type SpeechRecognitionLike = {
+  lang: string;
+  continuous: boolean;
+  interimResults: boolean;
+  onresult: ((event: any) => void) | null;
+  onend: (() => void) | null;
+  onerror: ((event: any) => void) | null;
+  start: () => void;
+  stop: () => void;
+};
+type SpeechRecognitionCtor = new () => SpeechRecognitionLike;
+const getSpeechRecognition = () => {
+  const browserWindow = window as any;
+  return (browserWindow.SpeechRecognition || browserWindow.webkitSpeechRecognition) as SpeechRecognitionCtor | undefined;
+};
 const expenseCategories = EXPENSE_CATEGORIES;
 const incomeCategories = INCOME_CATEGORIES;
 const allCategories: FinanceCategory[] = [...expenseCategories, ...incomeCategories.filter((category) => !expenseCategories.includes(category as ExpenseCategory))];
@@ -54,6 +88,12 @@ export default function FinanceHub() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
+  const [analysisBusy, setAnalysisBusy] = useState(false);
+  const [analysisQuestion, setAnalysisQuestion] = useState("");
+  const [analysisResult, setAnalysisResult] = useState("");
+  const [voiceListening, setVoiceListening] = useState(false);
+  const [voiceStatus, setVoiceStatus] = useState("");
+  const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
   const [importHolder, setImportHolder] = useState<FinanceHolder | undefined>();
   const [documents, setDocuments] = useState<StoredFinanceDocument[]>([]);
   const [period, setPeriod] = useState(() => localToday().slice(0, 7));
@@ -64,6 +104,11 @@ export default function FinanceHub() {
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [searchText, setSearchText] = useState("");
   const draftCategories: readonly FinanceCategory[] = draft.type === "income" ? incomeCategories : expenseCategories;
+
+  useEffect(() => () => {
+    recognitionRef.current?.stop();
+    window.speechSynthesis?.cancel();
+  }, []);
 
   const selectPeriod = (value: string) => {
     setPeriod(value);
@@ -88,7 +133,7 @@ export default function FinanceHub() {
     return () => { active = false; window.removeEventListener("iris-local-changed", load); };
   }, []);
 
-  const financeDocuments = useMemo(() => documents.filter((doc) => doc.kind === "financeiro" || doc.folder === "Financeiro"), [documents]);
+  const financeDocuments = useMemo(() => documents.filter((doc) => isFinancialDocument(doc) && !isContractDocument(doc)), [documents]);
   const editingEntry = editingId ? items.find((entry) => entry.id === editingId) : undefined;
   const editingInvoiceDocument = editingEntry
     ? financeDocuments.find((document) => document.id === editingEntry.sourceDocumentId || editingEntry.id.startsWith(`${document.id}:expense:`))
@@ -110,6 +155,11 @@ export default function FinanceHub() {
   const periodEntries = useMemo(() => filterEntriesByMonth(items, financeDocuments, period).filter((entry) => matchesFinanceHolder(entry, holderFilter)), [items, financeDocuments, period, holderFilter]);
   const summary = useMemo(() => summarizeEntries(periodEntries), [periodEntries]);
   const annualSeries = useMemo(() => buildMonthlySeries(items.filter((entry) => matchesFinanceHolder(entry, holderFilter)), financeDocuments, chartYear), [items, financeDocuments, chartYear, holderFilter]);
+  const annualEntries = useMemo(() => items.filter((entry) => {
+    if (!matchesFinanceHolder(entry, holderFilter)) return false;
+    return getEntryPeriod(entry, financeDocuments).month?.startsWith(`${chartYear}-`) ?? false;
+  }), [items, financeDocuments, chartYear, holderFilter]);
+  const annualCategoryGroups = useMemo(() => groupExpenses(annualEntries), [annualEntries]);
   const categoryGroups = useMemo(() => groupExpenses(periodEntries), [periodEntries]);
   const invoiceDocuments = useMemo(() => holderDocuments.filter((doc) => typeof doc.statementTotal === "number" || Boolean(doc.statementDueAt) || Boolean(doc.institution) || Boolean(doc.brand)), [holderDocuments]);
   const periodInvoiceDocuments = useMemo(() => invoiceDocuments.filter((doc) => period === "all" ? true : period === "undated" ? !getDocumentMonth(doc) : getDocumentMonth(doc) === period), [invoiceDocuments, period]);
@@ -168,6 +218,41 @@ export default function FinanceHub() {
     if (editingId === id) { setEditingId(null); setDraft(newDraft()); }
   };
 
+  const clearAllFinanceHistory = async () => {
+    const expectedCount = items.length;
+    if (busy || expectedCount === 0) return;
+    const confirmed = window.confirm(`Apagar permanentemente todos os ${expectedCount} lançamentos financeiros deste dispositivo, de todos os períodos e titulares? Serão apagados somente receitas e despesas em Finanças. Faturas, PDFs originais, contratos e demais documentos permanecerão intactos. Se você reler uma fatura depois, os lançamentos dela poderão ser criados novamente. Esta ação não pode ser desfeita.`);
+    if (!confirmed) return;
+    setBusy(true);
+    try {
+      const removed = await clearFinancialLedgerIfCount(expectedCount);
+      setItems([]);
+      if (editingId) { setEditingId(null); setDraft(newDraft()); }
+      setMessage(`${removed} lançamento(s) removido(s) de Finanças neste dispositivo. Faturas e documentos originais foram preservados.`);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Não foi possível apagar o histórico; nenhum documento foi alterado.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const clearArchivedFinancialDocuments = async () => {
+    const expectedCount = financeDocuments.length;
+    if (busy || expectedCount === 0) return;
+    const confirmed = window.confirm(`Apagar permanentemente os ${expectedCount} documentos financeiros arquivados neste dispositivo, incluindo PDFs/imagens originais? Serão removidas somente faturas/extratos da coleção local de documentos. Contratos, documentos gerais e lançamentos financeiros permanecerão intactos. Para importá-los novamente depois, você precisará escolher os arquivos originais do seu computador. Esta ação não pode ser desfeita.`);
+    if (!confirmed) return;
+    setBusy(true);
+    try {
+      const removed = await clearFinancialDocumentsIfCount(expectedCount);
+      setDocuments((current) => current.filter((doc) => !isFinancialDocument(doc) || isContractDocument(doc)));
+      setMessage(`${removed} documento(s) financeiro(s) e seus arquivos originais foram removidos deste dispositivo. Lançamentos do livro e demais documentos permaneceram intactos.`);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Não foi possível apagar os documentos financeiros; os originais e lançamentos foram preservados.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const updateDocumentHolder = async (documentId: string, value: string) => {
     const nextHolder = parseFinanceHolder(value);
     try {
@@ -197,7 +282,12 @@ export default function FinanceHub() {
       const hash = await financialFileHash(file);
       const storedDocuments = await readLocal<StoredFinanceDocument[]>("irisDocuments", []);
       const legacyHash = redactFinancialIdentifiers(`${file.name.toLowerCase()}|${file.size}|${file.lastModified}`);
-      const existing = storedDocuments.find((item) => preferredId ? item.id === preferredId : item.hash === hash || item.hash === legacyHash);
+      const existing = storedDocuments.find((item) => preferredId ? item.id === preferredId : item.hash === hash);
+      const legacyCandidate = !preferredId && !existing ? storedDocuments.find((item) => item.hash === legacyHash) : undefined;
+      if (legacyCandidate && !window.confirm("Há um arquivo antigo com o mesmo nome e tamanho, mas sua identidade não pode ser confirmada por conteúdo. Se continuar, ele será tratado como outro documento e poderá gerar despesas duplicadas. Cancele para revisar a fatura arquivada ou continue somente se tiver certeza.")) {
+        setMessage("Importação cancelada; o documento anterior e os lançamentos não foram alterados.");
+        return;
+      }
       document = { ...existing, id: existing?.id ?? crypto.randomUUID(), name: safeName, mime: file.type || "application/octet-stream", size: file.size, folder: "Financeiro", kind: "financeiro", createdAt: existing?.createdAt ?? new Date().toISOString(), extractedText: existing?.extractedText ?? "", analysis: file.type.startsWith("image/") || file.type === "application/pdf" ? "arquivado · OCR necessário" : "arquivado · formato não textual", money: existing?.money ?? [], markers: {}, hash, reviewStatus: "pending", confidence: 0, holder: existing?.holder, holderSource: existing?.holderSource, blob: existing?.blob ?? new Blob([file], { type: file.type || "application/octet-stream" }), processing: true };
       await upsertStoredDocument(document);
       const { reading: result, statement, reliable } = await readFinancialDocument(file, ({ progress, status }) => setMessage(`${safeName} · ${status} (${Math.round(progress * 100)}%). Sem envio do PDF.`), forceOcr);
@@ -208,32 +298,149 @@ export default function FinanceHub() {
       const detectedHolder = reliable ? statement.cardholder : undefined;
       const documentHolder = requestedHolder ?? (existingHolderIsManual ? existing?.holder : detectedHolder ?? existing?.holder);
       const documentHolderSource: StoredFinanceDocument["holderSource"] = requestedHolder ? "manual" : existingHolderIsManual ? "manual" : detectedHolder ? "statement" : existing?.holderSource;
-      document = { ...document, kind: "financeiro", extractedText: reliable ? redactFinancialIdentifiers(result.text) : document.extractedText, analysis: reliable ? "texto extraído" : file.type.startsWith("image/") || file.type === "application/pdf" ? "arquivado · OCR necessário" : "arquivado · formato não textual", money: parsed.length ? parsed : document.money, total: parsed.length ? parsed.reduce((sum, line) => sum + line.amount, 0) : document.total, institution: statement.institution ?? document.institution, brand: statement.brand ?? document.brand, statementTotal: statement.statementTotal ?? document.statementTotal, statementDueAt: statement.statementDueAt ?? document.statementDueAt, holder: documentHolder, holderSource: documentHolderSource, warnings, confidence: result.confidence / 100, processing: false, processingError: undefined };
       const latestDocuments = await readLocal<StoredFinanceDocument[]>("irisDocuments", []);
       const latestEntries = await readLocal<Entry[]>("irisFinances", []);
-      const builtEntries = parsed.length ? buildStatementEntries<Entry>(document, latestEntries) : latestEntries;
       const hasPreviousRows = latestEntries.some((entry) => entry.sourceDocumentId === document!.id || entry.id.startsWith(`${document!.id}:expense:`));
-      const replacementBlocked = hasPreviousRows && (!parsed.length || builtEntries === latestEntries);
-      let nextEntries = replacementBlocked ? latestEntries : builtEntries;
-      if (replacementBlocked) {
-        const previous = latestDocuments.find((item) => item.id === document!.id) ?? existing;
-        const warning = "A releitura não encontrou transações suficientes ou não correspondeu a todos os lançamentos anteriores. O histórico, o vencimento e o período foram preservados; confira o PDF e tente novamente.";
-        document = preserveBlockedStatementData(document, previous, warning);
-      } else if (parsed.length > 0 && existing && existing.holder !== document.holder) {
-        nextEntries = propagateDocumentHolder(builtEntries, document.id, existing.holder, document.holder);
+      if (parsed.length > 0 && reliable) {
+        const pendingReview: PendingFinanceReview = {
+          money: parsed,
+          total: parsed.reduce((sum, line) => sum + line.amount, 0),
+          extractedText: redactFinancialIdentifiers(result.text),
+          analysis: "texto extraído",
+          confidence: result.confidence / 100,
+          warnings,
+          institution: statement.institution,
+          brand: statement.brand,
+          statementTotal: statement.statementTotal,
+          statementDueAt: statement.statementDueAt,
+          holder: documentHolder,
+          holderSource: documentHolderSource,
+        };
+        document = { ...document, kind: "financeiro", pendingReview, warnings, reviewStatus: "pending", processing: false, processingError: undefined };
+        const nextDocuments = [document, ...latestDocuments.filter((item) => item.id !== document!.id)];
+        await writeLocal("irisDocuments", nextDocuments);
+        setItems(latestEntries);
+        setDocuments(nextDocuments);
+        setMessage(`${parsed.length} candidato(s) extraído(s), soma de ${money(pendingReview.total)}. Ainda não foram incluídos nos totais. Confira a prévia e confirme para lançar.${warnings.length ? ` ${warnings.join(" ")}` : ""}`);
+      } else {
+        const baseDocument: StoredFinanceDocument = {
+          ...document,
+          kind: "financeiro",
+          extractedText: reliable ? redactFinancialIdentifiers(result.text) : document.extractedText,
+          analysis: reliable ? "texto extraído" : file.type.startsWith("image/") || file.type === "application/pdf" ? "arquivado · OCR necessário" : "arquivado · formato não textual",
+          institution: statement.institution ?? document.institution,
+          brand: statement.brand ?? document.brand,
+          statementTotal: statement.statementTotal ?? document.statementTotal,
+          statementDueAt: statement.statementDueAt ?? document.statementDueAt,
+          holder: documentHolder,
+          holderSource: documentHolderSource,
+          warnings,
+          confidence: result.confidence / 100,
+          processing: false,
+          processingError: undefined,
+        };
+        const previous = latestDocuments.find((item) => item.id === baseDocument.id) ?? existing;
+        document = hasPreviousRows
+          ? preserveBlockedStatementData(baseDocument, previous, "A releitura não encontrou candidatos confiáveis; o histórico, a fatura anterior e o período foram preservados. Confira o PDF e tente novamente.")
+          : baseDocument;
+        const nextDocuments = [document, ...latestDocuments.filter((item) => item.id !== document!.id)];
+        await writeLocal("irisDocuments", nextDocuments);
+        setItems(latestEntries);
+        setDocuments(nextDocuments);
+        setMessage(reliable
+          ? `A leitura não encontrou transações confiáveis. Nenhum lançamento foi criado ou removido.${warnings.length ? ` ${warnings.join(" ")}` : ""}`
+          : `Leitura insuficiente (confiança ${Math.round(result.confidence)}%). Nenhum lançamento foi criado ou removido.${warnings.length ? ` ${warnings.join(" ")}` : ""}`);
       }
-      const nextDocuments = [document, ...latestDocuments.filter((item) => item.id !== document!.id)];
-      await writeLocalBatch({ irisDocuments: nextDocuments, irisFinances: nextEntries });
-      setItems(nextEntries); setDocuments(nextDocuments);
-      setMessage(replacementBlocked ? "Releitura incompleta ou divergente: nenhum lançamento anterior foi removido ou alterado. O histórico foi preservado; confira o PDF e use Editar para ajustes individuais." : parsed.length
-        ? `${parsed.length} lançamento(s) individualizado(s) para revisão. ${holderFilter === "combined" ? "Titularidade preservada e oculta nesta visão." : `Titular: ${financeHolderLabel(document.holder)}.`} ${document.institution ?? "Instituição não identificada"} · ${document.brand ?? "Bandeira não identificada"}. Números de conta e cartão omitidos da análise.${warnings.length ? ` ${warnings.join(" ")}` : ""}`
-        : reliable ? `A leitura não encontrou transações confiáveis. Nenhum lançamento anterior foi apagado. Use “Ler imagem (OCR)” para tentar outra leitura.${warnings.length ? ` ${warnings.join(" ")}` : ""}` : `Leitura insuficiente (confiança ${Math.round(result.confidence)}%). Nenhum lançamento anterior foi apagado.${warnings.length ? ` ${warnings.join(" ")}` : ""}`);
       if (!preferredId) setImportHolder(undefined);
     } catch (error) {
       if (document) await upsertStoredDocument({ ...document, processing: false, processingError: error instanceof Error ? error.message : "Falha na leitura local." }).catch(() => undefined);
       setMessage(error instanceof Error ? redactFinancialIdentifiers(`Falha na leitura de ${safeName}. ${error.message}`) : `Falha na leitura de ${safeName}.`);
     } finally { setBusy(false); }
   };
+
+  const confirmPendingReview = async (documentId: string) => {
+    if (busy) return;
+    const staged = documents.find((doc) => doc.id === documentId)?.pendingReview;
+    if (!staged?.money.length) { setMessage("Não há linhas pendentes para lançar."); return; }
+    const total = staged.money.reduce((sum, row) => sum + row.amount, 0);
+    if (!window.confirm(`Confirmar ${staged.money.length} lançamento(s) financeiros no total de ${money(total)}? Eles passarão a compor as somas mensais. O arquivo original continuará arquivado neste dispositivo.`)) return;
+    setBusy(true);
+    try {
+      const [latestDocuments, latestEntries] = await Promise.all([
+        readLocal<StoredFinanceDocument[]>("irisDocuments", []),
+        readLocal<Entry[]>("irisFinances", []),
+      ]);
+      const current = latestDocuments.find((doc) => doc.id === documentId);
+      const review = current?.pendingReview ?? staged;
+      if (!current || !review?.money.length) { setMessage("A prévia pendente mudou ou não está mais disponível; nenhum lançamento foi criado."); return; }
+      if (review.money.some((row) => !Number.isFinite(row.amount) || row.amount <= 0)) {
+        setMessage("A prévia contém um valor inválido. Nenhum lançamento foi criado; tente reler o documento.");
+        return;
+      }
+      const finalDocument: StoredFinanceDocument = {
+        ...current,
+        extractedText: review.extractedText || current.extractedText,
+        analysis: review.analysis,
+        money: review.money,
+        total: review.money.reduce((sum, row) => sum + row.amount, 0),
+        institution: review.institution ?? current.institution,
+        brand: review.brand ?? current.brand,
+        statementTotal: review.statementTotal ?? current.statementTotal,
+        statementDueAt: review.statementDueAt ?? current.statementDueAt,
+        holder: current.holderSource === "manual" ? current.holder : review.holder ?? current.holder,
+        holderSource: current.holderSource === "manual" ? "manual" : review.holderSource ?? current.holderSource,
+        warnings: review.warnings,
+        confidence: review.confidence,
+        reviewStatus: "confirmed",
+        pendingReview: undefined,
+        processing: false,
+        processingError: undefined,
+      };
+      const builtEntries = buildStatementEntries<Entry>(finalDocument, latestEntries);
+      const hasPreviousRows = latestEntries.some((entry) => entry.sourceDocumentId === documentId || entry.id.startsWith(`${documentId}:expense:`));
+      if (hasPreviousRows && builtEntries === latestEntries) {
+        setMessage("A prévia não conciliou todos os lançamentos antigos. Nada foi alterado; os dados anteriores e esta prévia foram preservados para conferência.");
+        return;
+      }
+      const nextEntries = hasPreviousRows && current.holder !== finalDocument.holder
+        ? propagateDocumentHolder(builtEntries, documentId, current.holder, finalDocument.holder)
+        : builtEntries;
+      const nextDocuments = [finalDocument, ...latestDocuments.filter((doc) => doc.id !== documentId)];
+      await writeLocalBatch({ irisDocuments: nextDocuments, irisFinances: nextEntries });
+      setDocuments(nextDocuments);
+      setItems(nextEntries);
+      setMessage(`${review.money.length} lançamento(s) incluído(s) em Finanças após sua confirmação. Soma das linhas: ${money(finalDocument.total ?? 0)}. Confira a diferença exibida em relação ao total da fatura.`);
+    } catch {
+      setMessage("Não foi possível confirmar a prévia neste dispositivo. O histórico e o documento original foram preservados.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const discardPendingReview = async (documentId: string) => {
+    if (busy || !window.confirm("Descartar somente esta leitura pendente? O PDF original e qualquer histórico financeiro confirmado serão preservados.")) return;
+    setBusy(true);
+    try {
+      const latestDocuments = await readLocal<StoredFinanceDocument[]>("irisDocuments", []);
+      const current = latestDocuments.find((doc) => doc.id === documentId);
+      if (!current?.pendingReview) { setMessage("Esta leitura não está mais pendente; nenhum registro foi alterado."); return; }
+      const nextDocument: StoredFinanceDocument = {
+        ...current,
+        pendingReview: undefined,
+        warnings: current.money.length ? current.warnings : ["Leitura pendente descartada; nenhum lançamento financeiro foi criado."],
+        processing: false,
+      };
+      const nextDocuments = [nextDocument, ...latestDocuments.filter((doc) => doc.id !== documentId)];
+      await writeLocal("irisDocuments", nextDocuments);
+      setDocuments(nextDocuments);
+      setMessage("Prévia descartada. O documento original e o histórico financeiro confirmado foram preservados.");
+    } catch {
+      setMessage("Não foi possível descartar a prévia; o documento original e os lançamentos foram mantidos.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const reprocess = (doc: StoredFinanceDocument, forceOcr = false) => {
     if (!doc.blob) { setMessage("O PDF original não está neste navegador. Importe-o novamente para leitura."); return; }
     void importFile(new File([doc.blob], doc.name, { type: doc.mime }), doc.id, forceOcr);
@@ -251,6 +458,106 @@ export default function FinanceHub() {
   const exportBackup = () => {
     downloadJson("iris-financas-backup.json", { format: "iris-finances", exportedAt: new Date().toISOString(), entries: items, statements: financeDocuments.map((doc) => ({ id: doc.id, name: redactFinancialIdentifiers(doc.name), institution: doc.institution, brand: doc.brand, holder: doc.holder, holderSource: doc.holderSource, statementTotal: doc.statementTotal, statementDueAt: doc.statementDueAt })) });
     setMessage("Cópia JSON do histórico financeiro baixada neste dispositivo.");
+  };
+
+  const speakFinanceResponse = (text: string) => {
+    if (!window.speechSynthesis || typeof SpeechSynthesisUtterance === "undefined") {
+      setVoiceStatus("A resposta está disponível em texto; este navegador não oferece reprodução de voz.");
+      return;
+    }
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = "pt-BR";
+    utterance.rate = 1;
+    window.speechSynthesis.speak(utterance);
+    setVoiceStatus("Lendo a resposta em voz alta.");
+  };
+
+  const askFinanceAnalysis = async (requestedQuestion = analysisQuestion.trim(), speakAnswer = false) => {
+    if (analysisBusy) return;
+    if (!periodEntries.length && !annualSeries.some((point) => point.count > 0)) {
+      const empty = "Não há lançamentos neste período nem no ano do gráfico para analisar. Escolha outro mês ou ano com registros.";
+      setAnalysisResult(empty);
+      if (speakAnswer) speakFinanceResponse(empty);
+      return;
+    }
+    const aggregate = buildFinanceAnalysisAggregate({
+      period: periodCaption,
+      summary,
+      recordCount: periodEntries.length,
+      comparisonYear: chartYear,
+      months: annualSeries.map((point) => ({ month: point.month, income: point.income, expense: point.expense, balance: point.balance, count: point.count })),
+      periodCategories: categoryGroups.map((group) => ({ category: group.category, total: group.total, count: group.count })),
+      yearCategories: annualCategoryGroups.map((group) => ({ category: group.category, total: group.total, count: group.count })),
+    });
+    const question = redactFinancialIdentifiers(requestedQuestion || "Analise minhas receitas e despesas, compare a evolução mês a mês e destaque tendências e pontos que devo revisar.");
+    const prompt = `Responda em português brasileiro usando somente os dados agregados abaixo. Os valores estão em centavos de reais (BRL). Pergunta do usuário: ${question}\n\nFaça uma leitura clara dos totais, tendências e categorias. Não invente saldo bancário, não afirme que conferiu PDFs e não conclua que um valor está correto apenas porque aparece nos registros. A comparação mensal cobre o ano indicado; pagamentos, créditos e outros componentes dos documentos originais não fazem parte deste resumo, a menos que estejam lançados.\n\nDados agregados: ${JSON.stringify(aggregate)}`;
+    setAnalysisBusy(true);
+    setAnalysisResult("");
+    try {
+      const response = await askIrisWorker(prompt);
+      const answer = response.text?.trim() || "A Iris não retornou uma análise. Tente novamente.";
+      setAnalysisResult(answer);
+      if (speakAnswer) speakFinanceResponse(answer);
+    } catch (error) {
+      setAnalysisResult(error instanceof Error ? error.message : "Não foi possível solicitar a análise. Verifique o acesso remoto e tente novamente.");
+    } finally {
+      setAnalysisBusy(false);
+    }
+  };
+
+  const startFinanceVoiceQuestion = () => {
+    const Constructor = getSpeechRecognition();
+    if (!Constructor) {
+      setVoiceStatus("Este navegador não oferece reconhecimento de voz. Você ainda pode digitar a pergunta.");
+      return;
+    }
+    let finalText = "";
+    let failed = false;
+    const recognition = new Constructor();
+    recognition.lang = "pt-BR";
+    recognition.continuous = false;
+    recognition.interimResults = true;
+    recognition.onresult = (event) => {
+      let segment = "";
+      for (let index = event.resultIndex; index < event.results.length; index += 1) {
+        const result = event.results[index];
+        if (result?.isFinal) segment += result?.[0]?.transcript ?? "";
+      }
+      if (segment.trim()) {
+        finalText = `${finalText} ${segment.trim()}`.trim().slice(0, 500);
+        setAnalysisQuestion(finalText);
+      }
+    };
+    recognition.onerror = (event) => {
+      failed = true;
+      setVoiceListening(false);
+      recognitionRef.current = null;
+      setVoiceStatus(`Reconhecimento de voz indisponível (${event?.error ?? "erro do microfone"}). Digite a pergunta ou tente novamente.`);
+    };
+    recognition.onend = () => {
+      setVoiceListening(false);
+      recognitionRef.current = null;
+      if (failed) return;
+      if (!finalText) {
+        setVoiceStatus("Não reconheci uma pergunta. Toque no microfone e fale novamente.");
+        return;
+      }
+      setVoiceStatus("Pergunta reconhecida; solicitando a análise da Iris.");
+      void askFinanceAnalysis(finalText, true);
+    };
+    setAnalysisQuestion("");
+    setAnalysisResult("");
+    setVoiceStatus("Ouvindo em português; fale sua pergunta agora.");
+    setVoiceListening(true);
+    recognitionRef.current = recognition;
+    try {
+      recognition.start();
+    } catch {
+      recognitionRef.current = null;
+      setVoiceListening(false);
+      setVoiceStatus("Não foi possível iniciar o microfone. Verifique a permissão do navegador.");
+    }
   };
 
   const openIncomeCount = periodEntries.filter((entry) => entry.type === "income" && entry.status === "open").length;
@@ -287,6 +594,19 @@ export default function FinanceHub() {
     <p className="finance-open-note"><CalendarDays size={15} /> Em aberto: <b>{openIncomeCount} receita(s) · {money(summary.openIncome)} a receber</b> e <b>{openExpenseCount} despesa(s) · {money(summary.openExpense)} a pagar</b>. {overdueCount} vencido(s). Valores já compõem os totais do período.</p>
     <div className="finance-chart-year-control"><label htmlFor="finance-chart-year">Ano do gráfico</label><select id="finance-chart-year" value={chartYear} onChange={(event) => { const year = Number(event.target.value); setChartYear(year); if (isMonth) setPeriod(`${year}-${period.slice(5)}`); }}>{years.map((year) => <option key={year} value={year}>{year}</option>)}</select></div>
     <FinanceMonthlyChart year={chartYear} series={annualSeries} selectedMonth={period} onSelectMonth={selectPeriod} />
+
+    <section className="finance-card finance-ai-analysis" aria-label="Perguntar à Iris sobre finanças">
+      <div className="finance-section-head"><div><span className="finance-section-kicker">ANÁLISE SOB DEMANDA</span><h2><Sparkles size={19} /> Perguntar à Iris sobre finanças</h2></div></div>
+      <p className="finance-privacy-note">A Iris analisa o período escolhido e a comparação mensal do ano do gráfico. Os dados financeiros enviados são somente totais agregados por mês/categoria e contagens; não incluem descrições de compras, titulares armazenados, PDFs nem números de cartão/conta. A pergunta digitada ou reconhecida por voz também é enviada à IA — evite incluir dados sensíveis. No modo Demonstração nada é enviado; a IA exige serviços remotos ativos e sessão desbloqueada.</p>
+      <label className="finance-analysis-question"><span>Sua pergunta (opcional)</span><textarea value={analysisQuestion} maxLength={500} onChange={(event) => setAnalysisQuestion(event.target.value)} placeholder="Ex.: compare minhas despesas deste mês com os meses anteriores" /></label>
+      <div className="finance-analysis-actions">
+        <Button type="button" variant="outline" disabled={analysisBusy} onClick={() => voiceListening ? recognitionRef.current?.stop() : startFinanceVoiceQuestion()}>{voiceListening ? <MicOff size={15} /> : <Mic size={15} />}{voiceListening ? "Parar e perguntar" : "Perguntar por voz"}</Button>
+        <Button type="button" disabled={analysisBusy || voiceListening} onClick={() => void askFinanceAnalysis()}>{analysisBusy ? <Loader2 className="animate-spin" size={15} /> : <Sparkles size={15} />}{analysisBusy ? "Analisando…" : "Pedir análise"}</Button>
+      </div>
+      <small className="finance-voice-note">O microfone só inicia quando você toca no botão. Ao terminar a fala, a pergunta reconhecida é enviada com os agregados. O reconhecimento pode usar o serviço de fala do navegador; a resposta falada usa a voz disponível neste dispositivo.</small>
+      {voiceStatus && <small className="finance-voice-status" role="status">{voiceStatus}</small>}
+      {analysisResult && <div className="finance-analysis-result" role="status" aria-live="polite"><p>{analysisResult}</p><Button type="button" variant="outline" size="sm" onClick={() => speakFinanceResponse(analysisResult)}><Volume2 size={15} /> Ouvir resposta</Button></div>}
+    </section>
 
     <section className="finance-card finance-ledger-card">
       <div className="finance-section-head"><div><span className="finance-section-kicker">CONTROLE DO PERÍODO</span><h2><FileText size={20} /> Lançamentos</h2></div><span className="finance-filter-count">{filteredItems.length} de {periodEntries.length}</span></div>
@@ -333,6 +653,7 @@ export default function FinanceHub() {
         <div className="finance-invoice-header"><b>{redactFinancialIdentifiers(doc.name)}</b><small>{redactFinancialIdentifiers(doc.institution ?? "Instituição não identificada")} · {redactFinancialIdentifiers(doc.brand ?? "Bandeira não identificada")}{getDocumentMonth(doc) ? ` · ${formatPeriodLabel(getDocumentMonth(doc)!)}` : " · período não identificado"}</small>{holderFilter !== "combined" && <small>Titular: {financeHolderLabel(doc.holder)}{doc.holderSource === "statement" ? " · identificado no campo Titular da fatura" : doc.holderSource === "manual" ? " · classificado por você" : " · confira no histórico de documentos"}</small>}</div>
         <div className="finance-invoice-metrics"><div><span>Total a pagar no documento</span><strong>{typeof doc.statementTotal === "number" ? money(doc.statementTotal) : "Não identificado"}</strong></div><div><span>Vencimento identificado</span><strong>{displayDate(doc.statementDueAt)}</strong></div></div>
         <small>Compras individualizadas: {money((doc.money ?? []).reduce((sum, row) => sum + row.amount, 0))} · {doc.money?.length ?? 0} lançamento(s); valor bruto, não equivalente necessariamente ao total da fatura.</small>
+        {typeof doc.statementTotal === "number" && <small>Diferença matemática (total da fatura − compras listadas): {money(doc.statementTotal - (doc.money ?? []).reduce((sum, row) => sum + row.amount, 0))}. Isso é uma referência: saldo anterior, pagamentos, créditos, estornos e taxas podem explicar diferenças.</small>}
         {!doc.statementDueAt && <small>Data ausente ou ambígua não é estimada. “Ler novamente” pode encontrar vencimento legível.</small>}
       </div>)}
     </section>}
@@ -346,7 +667,7 @@ export default function FinanceHub() {
       <small className="finance-privacy-note">O documento original fica separado e local e pode conter dados pessoais. A análise e os relatórios não incluem números de conta/cartão. Os dados permanecem neste dispositivo; faça backup local antes de limpar o navegador.</small>
     </section>
 
-    {holderDocuments.length > 0 && <details className="finance-card finance-document-history">
+    {holderDocuments.length > 0 && <details className="finance-card finance-document-history" open={holderDocuments.some((doc) => Boolean(doc.pendingReview))}>
       <summary><span><FileText size={19} /> Histórico completo de faturas e documentos</span><small>{holderDocuments.length} documento(s) · {holderFilter === "combined" ? "visão geral, titulares ocultos" : holderFilter === "all" ? "todos os titulares" : holderFilter === "unassigned" ? "titular não definido" : financeHolderLabel(holderFilter)}</small></summary>
       <p className="finance-privacy-note">{holderFilter === "combined" ? "Titulares ocultos nesta visão. Para revisar ou classificar uma fatura, selecione “Todos os titulares — nomes visíveis” ou a pessoa desejada no filtro." : "O histórico continua acessível mesmo ao consultar um mês vazio. Revise o titular identificado na fatura; a classificação ajusta apenas as despesas ligadas ao documento, preservando linhas editadas individualmente."}</p>
       {holderDocuments.slice().sort((a, b) => b.createdAt.localeCompare(a.createdAt)).map((doc) => <div className="finance-statement" key={doc.id}>
@@ -358,9 +679,32 @@ export default function FinanceHub() {
         {typeof doc.statementTotal === "number" && <small>Total informado na fatura: {money(doc.statementTotal)}. Pode incluir saldo anterior e ajustes além das compras individualizadas.</small>}
         {doc.warnings?.map((warning, index) => <small key={index} className="finance-warning">{redactFinancialIdentifiers(warning)}</small>)}
         {doc.processingError && <small className="finance-warning">{redactFinancialIdentifiers(doc.processingError)}</small>}
+        {doc.pendingReview && <div className="finance-review-pending">
+          <strong>Conferência necessária · {doc.pendingReview.money.length} candidato(s) · soma {money(doc.pendingReview.total)}</strong>
+          <small>Esses valores ainda não estão nos totais de Finanças. Revise as linhas contra o PDF original; confirme somente se estiverem corretas. Confiança da leitura: {Math.round(doc.pendingReview.confidence * 100)}%.</small>
+          {typeof doc.pendingReview.statementTotal === "number" && <small>Referência da fatura: {money(doc.pendingReview.statementTotal)} · diferença em relação à prévia: {money(doc.pendingReview.statementTotal - doc.pendingReview.total)}. Pode haver saldo anterior, pagamento, crédito ou taxas.</small>}
+          <div className="finance-review-lines" role="list" aria-label={`Linhas extraídas de ${doc.name}`}>
+            {doc.pendingReview.money.map((line, index) => <div className="finance-review-line" role="listitem" key={`${index}-${line.date ?? "sem-data"}`}><span><b>{redactFinancialIdentifiers(line.source)}</b><small>{line.date ?? "Data não identificada"} · {line.category}</small></span><strong>{money(line.amount)}</strong></div>)}
+          </div>
+          <div className="finance-import-actions"><Button type="button" disabled={busy} onClick={() => void confirmPendingReview(doc.id)}><Check size={15} /> Conferi: lançar {doc.pendingReview.money.length} linhas</Button><Button type="button" variant="outline" disabled={busy} onClick={() => void discardPendingReview(doc.id)}><X size={15} /> Descartar leitura</Button></div>
+        </div>}
         <div className="finance-import-actions"><Button type="button" variant="outline" onClick={() => reprocess(doc)} disabled={busy || !doc.blob}>Ler novamente</Button>{/pdf|image/.test(doc.mime) && <Button type="button" variant="outline" onClick={() => reprocess(doc, true)} disabled={busy || !doc.blob}>Ler imagem (OCR)</Button>}{!doc.blob && <small>O arquivo original não está mais neste navegador. Importe-o novamente para reler.</small>}</div>
       </div>)}
     </details>}
+
+    <details className="finance-card finance-danger-zone">
+      <summary><Trash2 size={17} /> Apagar histórico financeiro</summary>
+      <p>Esta ação remove somente lançamentos (receitas e despesas) de Finanças neste dispositivo. Faturas, PDFs originais, contratos, documentos locais e backups baixados permanecem intactos. Se você reler uma fatura preservada, os lançamentos dela poderão ser criados novamente.</p>
+      <small>Histórico atual: {items.length} lançamento(s), incluindo todos os períodos e titulares.</small>
+      <Button type="button" variant="destructive" disabled={busy || !items.length} onClick={() => void clearAllFinanceHistory()}><Trash2 size={15} /> Apagar todos os {items.length} lançamentos</Button>
+    </details>
+
+    <details className="finance-card finance-danger-zone">
+      <summary><Trash2 size={17} /> Apagar faturas e PDFs arquivados</summary>
+      <p>Esta ação remove somente os documentos financeiros armazenados neste dispositivo, incluindo seus arquivos originais locais. Lançamentos do livro, contratos e documentos gerais permanecem. Nenhum arquivo em Google Drive, R2 ou outro serviço remoto é apagado. Para importar as faturas depois, escolha novamente os arquivos originais no computador.</p>
+      <small>Documentos financeiros locais: {financeDocuments.length} arquivo(s).</small>
+      <Button type="button" variant="destructive" disabled={busy || !financeDocuments.length} onClick={() => void clearArchivedFinancialDocuments()}><Trash2 size={15} /> Apagar os {financeDocuments.length} documentos financeiros</Button>
+    </details>
 
     <footer className="finance-footer"><span><WalletCards size={15} /> Histórico salvo neste dispositivo; faça backup antes de limpar o navegador.</span><Link href="/configuracoes">Backup completo nas Configurações <ChevronRight size={15} /></Link></footer>
   </div></main>;

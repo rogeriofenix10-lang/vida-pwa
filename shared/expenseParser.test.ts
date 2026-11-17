@@ -11,8 +11,29 @@ describe("individualização de gastos para revisão", () => {
     expect(parseBrazilianAmount("1.234,56")).toBe(1234.56);
     expect(parseExpenseLines("Hotel Diária 350,00 Total cobrado 1.050,00")[0].amount).toBe(1050);
   });
+  it("prefere uma única quantia BRL explícita sobre uma conversão estrangeira", () => {
+    expect(parseExpenseLines("Loja Aurora R$ 100,00 (USD 20.00)").map(row => row.amount)).toEqual([100]);
+  });
+  it("omite uma linha com vários valores sem rótulo confiável", () => {
+    expect(parseExpenseLines("Loja Aurora 40,00 conversão 8,00")).toEqual([]);
+  });
   it("não cria gasto para linhas sem valor, zero, crédito ou resumo", () => {
     expect(parseExpenseLines("Hotel central\nTotal da fatura 100,00\nSaldo anterior 12,00\nTroco 2,00\nPagamento mínimo 10,00\nPosto -15,00\nMercado 0,00")).toEqual([]);
+  });
+  it("não transforma total, saldo ou pagamento em compra quando há data na linha", () => {
+    expect(parseExpenseLines([
+      "31/05 Total a pagar R$ 100,00",
+      "31/05 Saldo anterior R$ 20,00",
+      "31/05 Pagamento recebido R$ 10,00",
+      "31/05 Totais R$ 40,00",
+      "31/05 Créditos R$ 30,00",
+      "31/05 Estornos R$ 5,00",
+      "31/05 Devoluções R$ 2,00",
+    ].join("\n"))).toEqual([]);
+  });
+  it("reconhece datas ISO e dia/mês com um dígito", () => {
+    const rows = parseExpenseLines("2026-06-05 Loja ISO R$ 10,00\n5/6 Loja BR R$ 20,00");
+    expect(rows.map(row => [row.amount, row.date])).toEqual([[10, "2026-06-05"], [20, "5/6"]]);
   });
   it("associa valor isolado à descrição anterior sem herdar categoria da transação anterior", () => {
     expect(parseExpenseLines("Hotel Central\nR$ 120,00\nLoja sem categoria 40,00").map(row => row.category)).toEqual(["Hotel", "Outros"]);

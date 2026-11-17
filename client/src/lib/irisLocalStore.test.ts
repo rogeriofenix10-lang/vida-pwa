@@ -2,6 +2,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { zipSync } from "fflate";
 import {
   assertLocalFileSize,
+  clearFinancialDocumentsIfCount,
+  clearFinancialLedgerIfCount,
   csvCell,
   inspectBackupFile,
   MAX_BACKUP_UNCOMPRESSED_BYTES,
@@ -9,6 +11,54 @@ import {
   restoreLocalBackup,
   unzipBackupArchive,
 } from "./irisLocalStore";
+
+function fakeLocalRecords(initial: Record<string, unknown>) {
+  const records = new Map(Object.entries(initial));
+  const database = {
+    objectStoreNames: { contains: () => true },
+    createObjectStore: vi.fn(),
+    close: vi.fn(),
+    transaction: () => {
+      const transaction: {
+        oncomplete: (() => void) | null;
+        onabort: (() => void) | null;
+        onerror: (() => void) | null;
+        error: DOMException | null;
+        objectStore: () => unknown;
+        abort: () => void;
+      } = {
+        oncomplete: null,
+        onabort: null,
+        onerror: null,
+        error: null,
+        objectStore: () => store,
+        abort: () => queueMicrotask(() => transaction.onabort?.()),
+      };
+      const store = {
+        get: (key: string) => {
+          const request: { result?: unknown; onsuccess: (() => void) | null; onerror: (() => void) | null } = { onsuccess: null, onerror: null };
+          queueMicrotask(() => { request.result = records.get(key); request.onsuccess?.(); });
+          return request as unknown as IDBRequest<unknown>;
+        },
+        put: (value: unknown, key: string) => {
+          records.set(key, structuredClone(value));
+          const request = { result: key, onsuccess: null, onerror: null };
+          setTimeout(() => transaction.oncomplete?.(), 0);
+          return request as unknown as IDBRequest<IDBValidKey>;
+        },
+      };
+      return transaction as unknown as IDBTransaction;
+    },
+  } as unknown as IDBDatabase;
+  const factory = {
+    open: () => {
+      const request: Record<string, unknown> = { result: database };
+      queueMicrotask(() => (request.onsuccess as (() => void) | null)?.());
+      return request as unknown as IDBOpenDBRequest;
+    },
+  };
+  return { factory, records, database };
+}
 
 describe("local file and CSV guards", () => {
   it("accepts the documented 50 MiB boundary and rejects larger files", () => {
@@ -35,6 +85,75 @@ describe("local file and CSV guards", () => {
     }
     expect(csvCell('descrição "com aspas"')).toBe('"descrição ""com aspas"""');
     expect(csvCell("texto normal")).toBe('"texto normal"');
+  });
+});
+
+describe("financial history deletion", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("clears only irisFinances when the confirmed count still matches", async () => {
+    const documents = [{ id: "doc-kept", blob: new Blob(["original"]) }];
+    const { factory, records, database } = fakeLocalRecords({
+      irisFinances: [{ id: "one" }, { id: "two" }],
+      irisDocuments: documents,
+    });
+    const localWindow = { indexedDB: factory, dispatchEvent: vi.fn() };
+    vi.stubGlobal("indexedDB", factory);
+    vi.stubGlobal("window", localWindow);
+
+    await expect(clearFinancialLedgerIfCount(2)).resolves.toBe(2);
+
+    expect(records.get("irisFinances")).toEqual([]);
+    expect(records.get("irisDocuments")).toBe(documents);
+    expect(database.close).toHaveBeenCalledOnce();
+    expect(localWindow.dispatchEvent).toHaveBeenCalledOnce();
+  });
+
+  it("does not modify either collection if the count changed after confirmation", async () => {
+    const finances = [{ id: "one" }, { id: "two" }];
+    const documents = [{ id: "doc-kept" }];
+    const { factory, records } = fakeLocalRecords({ irisFinances: finances, irisDocuments: documents });
+    vi.stubGlobal("indexedDB", factory);
+    vi.stubGlobal("window", { indexedDB: factory, dispatchEvent: vi.fn() });
+
+    await expect(clearFinancialLedgerIfCount(3)).rejects.toThrow("nenhum registro foi apagado");
+
+    expect(records.get("irisFinances")).toBe(finances);
+    expect(records.get("irisDocuments")).toBe(documents);
+  });
+
+  it("removes only archived finance files and preserves ledger entries and contracts", async () => {
+    const financeOriginal = { id: "invoice", kind: "financeiro", folder: "Financeiro", blob: new Blob(["original pdf"]) };
+    const generalDocument = { id: "general", kind: "geral", folder: "Documentos" };
+    const contract = { id: "contract", kind: "financeiro", folder: "Financeiro", classificationKind: "contrato" };
+    const finances = [{ id: "entry-from-invoice" }];
+    const { factory, records, database } = fakeLocalRecords({
+      irisDocuments: [financeOriginal, generalDocument, contract],
+      irisFinances: finances,
+    });
+    const localWindow = { indexedDB: factory, dispatchEvent: vi.fn() };
+    vi.stubGlobal("indexedDB", factory);
+    vi.stubGlobal("window", localWindow);
+
+    await expect(clearFinancialDocumentsIfCount(1)).resolves.toBe(1);
+
+    expect(records.get("irisDocuments")).toEqual([generalDocument, contract]);
+    expect(records.get("irisFinances")).toBe(finances);
+    expect(database.close).toHaveBeenCalledOnce();
+    expect(localWindow.dispatchEvent).toHaveBeenCalledOnce();
+  });
+
+  it("preserves every document when its confirmed financial-document count has changed", async () => {
+    const documents = [{ id: "invoice", kind: "financeiro", folder: "Financeiro" }];
+    const finances = [{ id: "entry" }];
+    const { factory, records } = fakeLocalRecords({ irisDocuments: documents, irisFinances: finances });
+    vi.stubGlobal("indexedDB", factory);
+    vi.stubGlobal("window", { indexedDB: factory, dispatchEvent: vi.fn() });
+
+    await expect(clearFinancialDocumentsIfCount(2)).rejects.toThrow("A quantidade de documentos mudou");
+
+    expect(records.get("irisDocuments")).toBe(documents);
+    expect(records.get("irisFinances")).toBe(finances);
   });
 });
 

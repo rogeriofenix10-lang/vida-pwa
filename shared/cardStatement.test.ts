@@ -43,6 +43,43 @@ describe("parseCardStatement", () => {
     expect(statement.warnings.some(warning => warning.includes("somente linhas datadas"))).toBe(true);
   });
 
+  it("extrai total sem agrupamento somente do cabeçalho/resumo e aceita datas ISO e d/m", () => {
+    const statement = parseCardStatement([
+      "ALTERNATIVAS DE PAGAMENTO",
+      "Total a pagar R$ 9.999,99",
+      "RESUMO DA FATURA",
+      "Total a pagar R$ 1234,56",
+      "TRANSAÇÕES",
+      "2026-06-05 Loja ISO R$ 10,00",
+      "5/6 Loja Brasileira R$ 20,00",
+      "31/05 Total a pagar R$ 777,00",
+    ].join("\n"));
+
+    expect(statement.statementTotal).toBe(1234.56);
+    expect(statement.expenses.map(row => [row.amount, row.date])).toEqual([
+      [10, "2026-06-05"], [20, "5/6"],
+    ]);
+  });
+
+  it("omite linha multi-valor ambígua e avisa sem devolver nome ou valores da linha", () => {
+    const statement = parseCardStatement([
+      "TRANSAÇÕES",
+      "05/06 Loja Confidencial 40,00 conversão 8,00",
+    ].join("\n"));
+
+    expect(statement.expenses).toEqual([]);
+    expect(statement.warnings.some(warning => warning.includes("múltiplos valores sem critério confiável"))).toBe(true);
+    expect(JSON.stringify(statement)).not.toMatch(/Loja Confidencial|40,00|8,00/);
+  });
+
+  it("não infere total a pagar a partir de alternativas de pagamento sem resumo explícito", () => {
+    const statement = parseCardStatement([
+      "ALTERNATIVAS DE PAGAMENTO",
+      "Total a pagar R$ 1234,56",
+    ].join("\n"));
+    expect(statement.statementTotal).toBeUndefined();
+  });
+
   it("detecta Rogério somente por campo explícito e devolve apenas o enum", () => {
     const statement = parseCardStatement([
       "Banco do Brasil Visa",

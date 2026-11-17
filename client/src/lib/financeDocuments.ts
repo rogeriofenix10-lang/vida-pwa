@@ -162,16 +162,21 @@ export function buildStatementEntries<T extends FinancialEntry>(document: Statem
 }
 
 export function groupExpenses(entries: FinancialEntry[]) {
-  const map = new Map<ExpenseCategory, { category: ExpenseCategory; total: number; count: number; entries: FinancialEntry[] }>();
+  const map = new Map<ExpenseCategory, { category: ExpenseCategory; totalCents: number; count: number; entries: FinancialEntry[] }>();
   for (const entry of entries.filter((item) => item.type === "expense")) {
+    if (!Number.isFinite(entry.amount) || entry.amount < 0) continue;
+    const cents = Math.round((entry.amount + Number.EPSILON) * 100);
+    if (!Number.isSafeInteger(cents)) continue;
     const category = entry.category && EXPENSE_CATEGORIES.includes(entry.category as ExpenseCategory)
       ? entry.category as ExpenseCategory
       : "Outros";
-    const group = map.get(category) ?? { category, total: 0, count: 0, entries: [] };
-    group.total = Math.round((group.total + entry.amount) * 100) / 100;
+    const group = map.get(category) ?? { category, totalCents: 0, count: 0, entries: [] };
+    group.totalCents += cents;
     group.count++;
     group.entries.push(entry);
     map.set(category, group);
   }
-  return [...map.values()].sort((a, b) => b.total - a.total);
+  return [...map.values()]
+    .map(({ totalCents, ...group }) => ({ ...group, total: totalCents / 100 }))
+    .sort((a, b) => b.total - a.total);
 }

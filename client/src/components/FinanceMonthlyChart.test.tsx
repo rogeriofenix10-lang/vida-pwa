@@ -31,7 +31,7 @@ describe("annual financial chart", () => {
   it("provides exact values in a real table and indicates the selected month", () => {
     const html = render(months([{ income: 0.1, expense: 0, balance: 0.1, count: 1 }, { income: 0.2, expense: 0.1, balance: 0.1, count: 2 }]));
     expect(html).toContain("aria-pressed=\"true\"");
-    expect(html).toContain("Conferir valores exatos por mês");
+    expect(html).toContain("Valores exatos e totalizações de cada mês");
     expect(html).toContain("Total do ano");
     expect(html).toContain("0,30");
     expect(html).not.toContain("NaN");
