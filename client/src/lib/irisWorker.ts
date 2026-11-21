@@ -1,3 +1,4 @@
+import { createIrisClockContext } from "@shared/irisTemporal";
 import {
   clearIrisDeviceCredentialAndAdvanceGeneration,
   clearIrisDeviceCredentialIfCurrent,
@@ -660,6 +661,7 @@ export function askIrisWorker(message: string, messages?: Array<{ role: string; 
     body: JSON.stringify({
       message,
       messages: messages?.slice(-20),
+      clockContext: createIrisClockContext(),
     }),
   });
 }
@@ -674,7 +676,7 @@ export async function askIrisAdvanced(input: {
 }) {
   return request<WorkerResponse & { mode: IrisAdvancedMode }>("/", {
     method: "POST",
-    body: JSON.stringify(input),
+    body: JSON.stringify({ ...input, clockContext: createIrisClockContext() }),
   });
 }
 

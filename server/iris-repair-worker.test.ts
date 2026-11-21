@@ -310,6 +310,87 @@ describe("Iris Worker security repair", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
+  it("returns Gmail subjects and senders from metadata-only reads without snippets or bodies", async () => {
+    const kv = memoryKV({
+      session: JSON.stringify({ access_token: "fictional-gmail-token", refresh_token: "fictional-refresh-token", expires_at: Date.now() + 3600000 }),
+    });
+    const requestUrls: URL[] = [];
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = new URL(String(input));
+      requestUrls.push(url);
+      if (url.pathname.endsWith("/messages")) {
+        return new Response(JSON.stringify({
+          resultSizeEstimate: 2,
+          snippet: "LISTING_SNIPPET_MUST_NOT_ESCAPE",
+          messages: [{ id: "msg-1", threadId: "thread-1" }, { id: "msg-2", threadId: "thread-2" }],
+        }), { status: 200, headers: { "Content-Type": "application/json" } });
+      }
+      if (url.searchParams.get("format") !== "metadata") throw new Error("Listing requested a non-metadata Gmail format");
+      const id = url.pathname.split("/").pop()!;
+      return new Response(JSON.stringify({
+        id,
+        threadId: `thread-${id.slice(-1)}`,
+        snippet: "DETAIL_SNIPPET_MUST_NOT_ESCAPE",
+        payload: {
+          headers: [
+            { name: "From", value: `Remetente <${id}@example.invalid>` },
+            { name: "Subject", value: `Assunto ${id}` },
+          ],
+          body: { data: "DETAIL_BODY_MUST_NOT_ESCAPE" },
+        },
+      }), { status: 200, headers: { "Content-Type": "application/json" } });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const env = { IRIS_ACCESS_SECRET: testSecret, IRIS_GMAIL_OAUTH: kv };
+    const { body: auth } = await login(env, productionOrigin);
+    const response = await worker.fetch(new Request("https://worker.test/gmail/messages", {
+      headers: { ...authHeaders(auth.token), Origin: productionOrigin },
+    }), env);
+
+    expect(response.status).toBe(200);
+    const result = await response.json();
+    expect(result.resultSizeEstimate).toBe(2);
+    expect(result.metadataUnavailableCount).toBe(0);
+    expect(result.messages).toEqual([
+      { id: "msg-1", threadId: "thread-1", subject: "Assunto msg-1", from: "Remetente <msg-1@example.invalid>" },
+      { id: "msg-2", threadId: "thread-2", subject: "Assunto msg-2", from: "Remetente <msg-2@example.invalid>" },
+    ]);
+    expect(JSON.stringify(result)).not.toContain("SNIPPET_MUST_NOT_ESCAPE");
+    expect(JSON.stringify(result)).not.toContain("DETAIL_BODY_MUST_NOT_ESCAPE");
+    const listUrl = requestUrls.find(url => url.pathname.endsWith("/messages"));
+    expect(listUrl?.searchParams.get("maxResults")).toBe("20");
+    const detailUrls = requestUrls.filter(url => url.searchParams.has("format"));
+    expect(detailUrls).toHaveLength(2);
+    for (const url of detailUrls) {
+      expect(url.searchParams.get("format")).toBe("metadata");
+      expect(url.searchParams.getAll("metadataHeaders")).toEqual(["Subject", "From"]);
+    }
+  });
+
+  it("keeps full Gmail content behind an explicit single-message read", async () => {
+    const kv = memoryKV({
+      session: JSON.stringify({ access_token: "fictional-gmail-token", refresh_token: "fictional-refresh-token", expires_at: Date.now() + 3600000 }),
+    });
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = new URL(String(input));
+      return new Response(JSON.stringify({
+        id: "msg-1",
+        payload: { body: { data: "EXPLICIT_MESSAGE_BODY" } },
+      }), { status: url.searchParams.get("format") === "full" ? 200 : 400, headers: { "Content-Type": "application/json" } });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const env = { IRIS_ACCESS_SECRET: testSecret, IRIS_GMAIL_OAUTH: kv };
+    const { body: auth } = await login(env);
+    const response = await worker.fetch(new Request("https://worker.test/gmail/message?id=msg-1", {
+      headers: authHeaders(auth.token),
+    }), env);
+
+    expect(response.status).toBe(200);
+    expect((await response.json()).payload.body.data).toBe("EXPLICIT_MESSAGE_BODY");
+    expect(new URL(String(fetchMock.mock.calls[0][0])).searchParams.get("format")).toBe("full");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
   it("rejects oversized JSON and history before any Gemini request", async () => {
     const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);

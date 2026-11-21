@@ -3,6 +3,7 @@ import { Link, useLocation, useSearch } from "wouter";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { startLogin } from "@/const";
 import { trpc } from "@/lib/trpc";
+import { answerIrisTemporalQuestion, createIrisClockContext } from "@shared/irisTemporal";
 import {
   completeRadarItem,
   editRadarItem,
@@ -1370,6 +1371,15 @@ export default function CommandCenter54() {
     // Ao enviar comando, abre automaticamente a visualização do Assistente para leitura
     setActiveView("assistente");
 
+    const temporalReply = selectedAttachments.length === 0
+      ? answerIrisTemporalQuestion(text, createIrisClockContext())
+      : null;
+    if (temporalReply) {
+      setChat((current) => [...current, { role: "assistant", text: temporalReply }]);
+      if (voiceEnabled) voice.speak(temporalReply);
+      setIrisState("idle");
+      return;
+    }
     const agendaQuestion = selectedAttachments.length === 0 ? parseAgendaQuestion(text) : null;
     if (agendaQuestion) {
       await queryAgendaQuestion(agendaQuestion);
@@ -1532,6 +1542,7 @@ export default function CommandCenter54() {
         conversationId,
         model: aiProvider,
         attachments: requestAttachments,
+        timeZone: createIrisClockContext().timeZone,
       });
 
       if (result.conversationId) setConversationId(result.conversationId);

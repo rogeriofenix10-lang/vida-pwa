@@ -1,3 +1,5 @@
+import { answerIrisTemporalQuestion, createIrisClockContext, irisTemporalPrompt } from "../shared/irisTemporal.ts";
+
 const DEFAULT_MODEL = "gemini-3.5-flash-lite";
 const MAX_PROMPT_LENGTH = 12000;
 const MAX_HISTORY_MESSAGES = 20;
@@ -19,6 +21,11 @@ const IRIS_SYSTEM_PROMPT = `Você é a Íris, consultora sênior multidisciplina
 Atue com rigor, não invente dados e diferencie fatos, estimativas e opiniões. Especialidades: marketing e inteligência artificial em nível avançado; estratégia, posicionamento, branding, pesquisa, segmentação, funil, conteúdo, mídia, métricas, automação e dados; Excel e Google Sheets, fórmulas, tabelas dinâmicas, validação, dashboards e modelagem; comercial, vendas, canais, precificação, margem e negociação; finanças, economia, administração e projetos; contratos e direito empresarial, civil e tributário, sempre avisando que não substitui advogado ou contador; textos, roteiros, apresentações, imagens, vídeos e áudio; saúde apenas de modo educacional, sem diagnóstico ou prescrição.
 
 Responda com clareza e recomendação prática. Para voz, seja natural e direto. Se o usuário disser pare, parar, silêncio ou cancele a leitura, confirme e não continue. Nunca envie e-mails, crie eventos, compartilhe arquivos ou execute ações externas sem autorização explícita. Quando houver e-mail autorizado, informe a quantidade, liste títulos e remetentes um a um, leia o conteúdo somente quando solicitado e pare imediatamente ao comando do usuário.`;
+
+function currentIrisSystemPrompt(body) {
+  const clock = createIrisClockContext(new Date(), body?.clockContext?.timeZone);
+  return `${IRIS_SYSTEM_PROMPT}\n\n${irisTemporalPrompt(clock)}`;
+}
 
 function origins(v) { return v ? v.split(",").map(x => x.trim()).filter(Boolean) : []; }
 function cors(o, c) { const list = origins(c); const ok = o && (list.includes(o) || o === "https://gentle-bread-2f69.pages.dev"); return { ...(ok ? { "Access-Control-Allow-Origin": o } : {}), "Access-Control-Allow-Headers": "content-type, authorization, x-iris-confirm, x-iris-filename, x-iris-file-id", "Access-Control-Allow-Methods": "GET, POST, PATCH, DELETE, OPTIONS", Vary: "Origin" }; }
@@ -402,6 +409,61 @@ async function gmail(req, env, path) {
   const extra = token.cookie ? { "Set-Cookie": cookie("iris_gmail", token.cookie, 2592000) } : {};
   return json(data, r.status, req.headers.get("Origin"), env.ALLOWED_ORIGIN, extra);
 }
+function gmailHeaderValue(headers, name) {
+  if (!Array.isArray(headers)) return "";
+  const header = headers.find(item => String(item?.name || "").toLowerCase() === name.toLowerCase());
+  return String(header?.value || "").replace(/[\r\n]+/g, " ").trim().slice(0, 1000);
+}
+async function gmailMessagesWithMetadata(req, env) {
+  const token = await gmailToken(req, env);
+  const origin = req.headers.get("Origin");
+  if (!token) return json({ error: "Gmail não autorizado. Use POST /oauth/start." }, 401, origin, env.ALLOWED_ORIGIN);
+  const base = "https://gmail.googleapis.com/gmail/v1/users/me/";
+  const authHeaders = { Authorization: "Bearer " + token.session.access_token };
+  const listUrl = new URL("messages", base);
+  listUrl.searchParams.set("maxResults", "20");
+  const listResponse = await fetch(listUrl, { headers: authHeaders });
+  const listing = await listResponse.json().catch(() => ({}));
+  const extra = token.cookie ? { "Set-Cookie": cookie("iris_gmail", token.cookie, 2592000) } : {};
+  if (!listResponse.ok) {
+    return json(listing, listResponse.status, origin, env.ALLOWED_ORIGIN, extra);
+  }
+
+  const listedMessages = Array.isArray(listing.messages) ? listing.messages.slice(0, 20) : [];
+  const messages = [];
+  for (let offset = 0; offset < listedMessages.length; offset += 5) {
+    const batch = await Promise.all(listedMessages.slice(offset, offset + 5).map(async listed => {
+      const id = typeof listed?.id === "string" ? listed.id : "";
+      if (!id) return null;
+      const messageUrl = new URL(`messages/${encodeURIComponent(id)}`, base);
+      messageUrl.searchParams.set("format", "metadata");
+      messageUrl.searchParams.append("metadataHeaders", "Subject");
+      messageUrl.searchParams.append("metadataHeaders", "From");
+      try {
+        const response = await fetch(messageUrl, { headers: authHeaders });
+        if (!response.ok) return { id, threadId: listed.threadId, metadataUnavailable: true };
+        const detail = await response.json();
+        const headers = detail?.payload?.headers;
+        if (!Array.isArray(headers)) return { id, threadId: listed.threadId, metadataUnavailable: true };
+        return {
+          id: typeof detail?.id === "string" ? detail.id : id,
+          threadId: typeof detail?.threadId === "string" ? detail.threadId : listed.threadId,
+          subject: gmailHeaderValue(headers, "Subject"),
+          from: gmailHeaderValue(headers, "From"),
+        };
+      } catch {
+        return { id, threadId: listed.threadId, metadataUnavailable: true };
+      }
+    }));
+    messages.push(...batch.filter(Boolean));
+  }
+  const metadataUnavailableCount = messages.filter(message => message.metadataUnavailable).length;
+  return json({
+    ...(typeof listing.resultSizeEstimate === "number" ? { resultSizeEstimate: listing.resultSizeEstimate } : {}),
+    messages,
+    metadataUnavailableCount,
+  }, 200, origin, env.ALLOWED_ORIGIN, extra);
+}
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 async function gemini(model, key, payload) {
   const url = "https://generativelanguage.googleapis.com/v1beta/models/" + encodeURIComponent(model) + ":generateContent?key=" + encodeURIComponent(key);
@@ -432,7 +494,7 @@ async function advancedGemini(body, env, origin) {
   if (!(mode in instructions)) return null;
   const prompt = `${instructions[mode]}\n${text}`.trim();
   const parts = [{ text: prompt }]; if (image) parts.push(image);
-  const result = await gemini(env.GEMINI_MODEL || DEFAULT_MODEL, env.GEMINI_API_KEY, { system_instruction: { parts: [{ text: IRIS_SYSTEM_PROMPT }] }, contents: [{ role: "user", parts }] });
+  const result = await gemini(env.GEMINI_MODEL || DEFAULT_MODEL, env.GEMINI_API_KEY, { system_instruction: { parts: [{ text: currentIrisSystemPrompt(body) }] }, contents: [{ role: "user", parts }] });
   if (result?.r?.ok) return json({ text: result.d?.candidates?.[0]?.content?.parts?.map(x => x.text || "").join("").trim() || "Sem resposta gerada.", model: env.GEMINI_MODEL || DEFAULT_MODEL, mode }, 200, origin, env.ALLOWED_ORIGIN);
   return json({ error: "Gemini HTTP " + (result?.r?.status || 503) + ".", details: result?.d?.error?.message || "Falha temporária após novas tentativas." }, result?.r?.status || 503, origin, env.ALLOWED_ORIGIN);
 }
@@ -619,7 +681,7 @@ async function handle(req, env) {
     return oauthStart(req, env, origin, allowed);
   }
   if (path === "/gmail/status") { if (req.method !== "GET") return json({ error: "Use GET." }, 405, origin, allowed); return json({ authorized: !!(await gmailToken(req, env)) }, 200, origin, allowed); }
-  if (path === "/gmail/messages") { if (req.method !== "GET") return json({ error: "Use GET." }, 405, origin, allowed); return gmail(req, env, "messages?maxResults=20"); }
+  if (path === "/gmail/messages") { if (req.method !== "GET") return json({ error: "Use GET." }, 405, origin, allowed); return gmailMessagesWithMetadata(req, env); }
   if (path === "/gmail/message") { if (req.method !== "GET") return json({ error: "Use GET." }, 405, origin, allowed); const id = url.searchParams.get("id"); if (!id) return json({ error: "Informe id." }, 400, origin, allowed); return gmail(req, env, "messages/" + encodeURIComponent(id) + "?format=full"); }
   if (path === "/google/drive/status") { if (req.method !== "GET") return json({ error: "Use GET." }, 405, origin, allowed); return json({ authorized: !!(await googleToken(req, env, "drive")) }, 200, origin, allowed); }
   if (path === "/google/calendar/status") { if (req.method !== "GET") return json({ error: "Use GET." }, 405, origin, allowed); return json({ authorized: !!(await googleToken(req, env, "calendar")) }, 200, origin, allowed); }
@@ -766,7 +828,6 @@ async function handle(req, env) {
   const raw = body?.message ?? body?.prompt ?? "", message = typeof raw === "string" ? raw.trim() : "";
   if (!message && !(Array.isArray(body?.messages) && body.messages.length)) return json({ error: "Mensagem não informada." }, 400, origin, allowed);
   if (message.length > MAX_PROMPT_LENGTH) return json({ error: "Mensagem excede o limite de 12000 caracteres." }, 413, origin, allowed);
-  if (!env.GEMINI_API_KEY) return json({ error: "Chave da API do Gemini não configurada." }, 500, origin, allowed);
   let contents;
   if (Array.isArray(body?.messages) && body.messages.length) {
     const selected = body.messages.slice(-MAX_HISTORY_MESSAGES);
@@ -775,8 +836,12 @@ async function handle(req, env) {
     if (historyLength > MAX_HISTORY_CHARS) return json({ error: "Histórico excede o limite de 24000 caracteres." }, 413, origin, allowed);
     contents = normalized.map(item => ({ role: item.role, parts: [{ text: item.text }] })).filter(item => item.parts[0].text);
   } else contents = [{ role: "user", parts: [{ text: message }] }];
+  const currentMessage = message || [...contents].reverse().find(item => item.role === "user")?.parts?.[0]?.text || "";
+  const temporalReply = answerIrisTemporalQuestion(currentMessage, createIrisClockContext(new Date(), body?.clockContext?.timeZone));
+  if (temporalReply) return json({ text: temporalReply, model: "verified-calendar" }, 200, origin, allowed);
+  if (!env.GEMINI_API_KEY) return json({ error: "Chave da API do Gemini não configurada." }, 500, origin, allowed);
   const model = env.GEMINI_MODEL || DEFAULT_MODEL;
-  const result = await gemini(model, env.GEMINI_API_KEY, { system_instruction: { parts: [{ text: IRIS_SYSTEM_PROMPT }] }, contents });
+  const result = await gemini(model, env.GEMINI_API_KEY, { system_instruction: { parts: [{ text: currentIrisSystemPrompt(body) }] }, contents });
   if (result?.r?.ok) return json({ text: result.d?.candidates?.[0]?.content?.parts?.map(x => x.text || "").join("").trim() || "Sem resposta gerada.", model }, 200, origin, allowed);
   return json({ error: "Gemini HTTP " + (result?.r?.status || 503) + ".", details: result?.d?.error?.message || "Falha temporária após novas tentativas." }, result?.r?.status || 503, origin, allowed);
 }
