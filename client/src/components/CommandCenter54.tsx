@@ -1371,8 +1371,9 @@ export default function CommandCenter54() {
     // Ao enviar comando, abre automaticamente a visualização do Assistente para leitura
     setActiveView("assistente");
 
+    const previousAssistantReply = [...chat].reverse().find((entry) => entry.role === "assistant")?.text;
     const temporalReply = selectedAttachments.length === 0
-      ? answerIrisTemporalQuestion(text, createIrisClockContext())
+      ? answerIrisTemporalQuestion(text, createIrisClockContext(), previousAssistantReply)
       : null;
     if (temporalReply) {
       setChat((current) => [...current, { role: "assistant", text: temporalReply }]);

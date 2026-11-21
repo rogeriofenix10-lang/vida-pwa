@@ -837,7 +837,8 @@ async function handle(req, env) {
     contents = normalized.map(item => ({ role: item.role, parts: [{ text: item.text }] })).filter(item => item.parts[0].text);
   } else contents = [{ role: "user", parts: [{ text: message }] }];
   const currentMessage = message || [...contents].reverse().find(item => item.role === "user")?.parts?.[0]?.text || "";
-  const temporalReply = answerIrisTemporalQuestion(currentMessage, createIrisClockContext(new Date(), body?.clockContext?.timeZone));
+  const previousAssistantReply = [...contents].reverse().find(item => item.role === "model")?.parts?.map(part => part.text || "").join("\n");
+  const temporalReply = answerIrisTemporalQuestion(currentMessage, createIrisClockContext(new Date(), body?.clockContext?.timeZone), previousAssistantReply);
   if (temporalReply) return json({ text: temporalReply, model: "verified-calendar" }, 200, origin, allowed);
   if (!env.GEMINI_API_KEY) return json({ error: "Chave da API do Gemini não configurada." }, 500, origin, allowed);
   const model = env.GEMINI_MODEL || DEFAULT_MODEL;

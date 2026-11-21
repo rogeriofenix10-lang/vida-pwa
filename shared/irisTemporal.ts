@@ -40,7 +40,7 @@ export function createIrisClockContext(now = new Date(), zone: unknown = deviceI
 }
 
 export function irisTemporalPrompt(clock: IrisClockContext): string {
-  return `Contexto temporal atualizado nesta solicitação: data atual ${clock.localDate}, ${clock.weekday}; hora ${clock.localTime}; fuso ${clock.timeZone}; instante ${clock.instant}. Use essa data para hoje, amanhã e próximo, mesmo se o histórico mencionar uma data antiga. Não diga que desconhece a data atual e não peça ao usuário para informá-la. O fuso não revela cidade, estado ou localização. Responda apenas ao pedido: singular pede um resultado; plural pede uma lista; quantidade, período e localidade explícitos devem ser respeitados. Não acrescente fatos, compromissos, valores ou datas sem evidência; diga quando não souber. Se uma ambiguidade mudar a resposta, esclareça somente o necessário. Não afirme ter consultado uma fonte, conta ou serviço sem que essa consulta realmente tenha ocorrido. Feriados exigem base verificável, e pontos facultativos não são feriados nacionais.`;
+  return `Contexto temporal atualizado nesta solicitação: data atual ${clock.localDate}, ${clock.weekday}; hora ${clock.localTime}; fuso ${clock.timeZone}; instante ${clock.instant}. Use essa data para hoje, amanhã e próximo, mesmo se o histórico mencionar uma data antiga. Não diga que desconhece a data atual e não peça ao usuário para informá-la. O fuso não revela cidade, estado ou localização. Responda apenas ao pedido: singular pede um resultado; plural pede uma lista; quantidade, período e localidade explícitos devem ser respeitados. Não acrescente fatos, compromissos, valores ou datas sem evidência; diga quando não souber. Se uma ambiguidade mudar a resposta, esclareça somente o necessário. Não afirme ter consultado uma fonte, conta ou serviço sem que essa consulta realmente tenha ocorrido. Não inclua fontes, links, URLs, citações, referências ou rodapés por padrão; só forneça essas informações quando o usuário pedir explicitamente a fonte, referência ou link. Feriados exigem base verificável, e pontos facultativos não são feriados nacionais.`;
 }
 
 const SOURCES = {
@@ -96,9 +96,33 @@ function explicitDate(text: string): string | undefined {
   return br ? `${br[3]}-${br[2].padStart(2, "0")}-${br[1].padStart(2, "0")}` : undefined;
 }
 
+function asksForSource(text: string): boolean {
+  return /\b(fontes?|referencias?|links?|urls?|origem|legislacao)\b/.test(text) ||
+    /\b(?:de onde (?:voce )?(?:tirou|consultou|viu|encontrou)|qual (?:e )?(?:a )?(?:lei|norma|base legal))\b/.test(text);
+}
+
+function sourcesFromPreviousHolidayReply(reply: string | undefined): string[] {
+  if (!reply || !/\bferiados?\b/.test(normalized(reply))) return [];
+  const dates = reply.match(/\b\d{1,2}\/\d{1,2}\/20\d{2}\b/g) ?? [];
+  const sources = new Set<string>();
+  for (const value of dates) {
+    const date = explicitDate(value);
+    if (!date) continue;
+    const holiday = irisNationalHolidays(Number(date.slice(0, 4))).find(item => item.date === date);
+    if (holiday) sources.add(holiday.source);
+  }
+  return [...sources];
+}
+
 /** Deterministic answers do not call AI, Google, geolocation or modify any data. */
-export function answerIrisTemporalQuestion(input: string, clock = createIrisClockContext()): string | null {
+export function answerIrisTemporalQuestion(input: string, clock = createIrisClockContext(), previousAssistantReply?: string): string | null {
   const text = normalized(input).replace(/^(?:iris[,!:.]?\s*)/, "");
+  const sourceRequested = asksForSource(text);
+  const holidayQuestion = /\bferiados?\b/.test(text);
+  if (!holidayQuestion && sourceRequested) {
+    const previousSources = sourcesFromPreviousHolidayReply(previousAssistantReply);
+    if (previousSources.length) return `Fonte${previousSources.length > 1 ? "s" : ""}: ${previousSources.join("\n")}`;
+  }
   if (/^(?:(?:qual (?:e |a |o )*)?(?:data (?:de hoje|atual)|dia (?:e )?hoje)|que dia (?:e |estamos )?(?:hoje|amanha|ontem)|hoje e que dia|qual (?:e )?(?:a )?data(?: de hoje)?)[?!.,\s]*$/.test(text)) {
     const offset = /amanha/.test(text) ? 1 : /ontem/.test(text) ? -1 : 0;
     const day = shiftDate(clock.localDate, offset);
@@ -107,7 +131,7 @@ export function answerIrisTemporalQuestion(input: string, clock = createIrisCloc
   if (/^(?:que horas (?:sao|e)(?: agora)?|qual (?:e )?(?:a )?hora(?: atual| agora)?)[?!.,\s]*$/.test(text)) {
     return `Agora são ${clock.localTime.slice(0, 5)} (${clock.timeZone}).`;
   }
-  if (!/\bferiados?\b/.test(text)) return null;
+  if (!holidayQuestion) return null;
   // A translation, document, reminder or compound action is not a holiday lookup.
   if (/\b(traduza|traduzir|escreva|redija|crie|agende|lembre|lembrete|marque|envie)\b/.test(text)) return null;
   if (/\b(municipal|municipais|estadual|estaduais|local|locais|minha cidade|meu estado|aqui|cidade|estado)\b/.test(text) ||
@@ -115,7 +139,7 @@ export function answerIrisTemporalQuestion(input: string, clock = createIrisCloc
     return "Para verificar feriados locais, preciso da cidade e do estado (ou do país, se não for Brasil). A data atual já está disponível; não vou presumir sua localização nem inventar feriados locais.";
   }
   if (/\b(pontos? facultativos?|carnaval|corpus christi|emenda|prolongado|prolongados)\b/.test(text)) {
-    return "Ponto facultativo não é automaticamente feriado nacional. Minha base distingue os feriados nacionais das regras locais; informe a data e a cidade/UF para verificar esse caso, sem presumir folga ou emenda.";
+    return "Ponto facultativo não é automaticamente feriado nacional. Informe a data e a cidade/UF se quiser verificar um feriado local; não vou presumir folga ou emenda.";
   }
 
   const yearNow = Number(clock.localDate.slice(0, 4));
@@ -126,7 +150,7 @@ export function answerIrisTemporalQuestion(input: string, clock = createIrisCloc
   }
   const explicitYear = text.match(/\b(20\d{2})\b/);
   const year = explicitYear ? Number(explicitYear[1]) : /\b(?:proximo ano|ano que vem)\b/.test(text) ? yearNow + 1 : yearNow;
-  if (year < 2024 || year > yearNow + 5) return "Não tenho um calendário oficial completo verificado para esse ano. Não vou extrapolar datas ou classificações sem fonte.";
+  if (year < 2024 || year > yearNow + 5) return "Não consigo confirmar com precisão os feriados nacionais desse ano. Não vou extrapolar datas ou classificações.";
   const dayRequested = explicitDate(text);
   if (dayRequested && !validDateKey(dayRequested)) return "A data informada não é válida. Qual data você deseja verificar?";
   const isDay = /\b(hoje|amanha|ontem)\b/.test(text) || Boolean(dayRequested);
@@ -134,8 +158,8 @@ export function answerIrisTemporalQuestion(input: string, clock = createIrisCloc
     const date = dayRequested ?? shiftDate(clock.localDate, /amanha/.test(text) ? 1 : /ontem/.test(text) ? -1 : 0);
     const match = irisNationalHolidays(Number(date.slice(0, 4))).find(h => h.date === date);
     return match
-      ? `${prettyDate(date)}, ${weekday(date)}: ${match.name}, feriado nacional no Brasil.\nFonte: ${match.source}`
-      : `${prettyDate(date)} não consta como feriado nacional na base verificada. Feriados locais dependem da cidade/UF.${Number(date.slice(0, 4)) !== 2026 ? " Para esse ano, a base cobre os feriados nacionais fixados em lei federal." : ""}`;
+      ? `${prettyDate(date)}, ${weekday(date)}: ${match.name}, feriado nacional no Brasil.${sourceRequested ? `\nFonte: ${match.source}` : ""}`
+      : `${prettyDate(date)} não aparece na lista de feriados nacionais. Feriados locais dependem da cidade/UF.`;
   }
 
   const upcoming = /\b(proxim[oa]s?|seguinte|seguintes|restam|restantes|faltam|ainda)\b/.test(text);
@@ -174,13 +198,14 @@ export function answerIrisTemporalQuestion(input: string, clock = createIrisCloc
   matches = matches.filter(h => h.date >= start && h.date <= end);
   // A requested period means that period only, not a fabricated number of entries.
   const selected = matches.slice(0, hasPeriod && plural && !token ? 50 : count);
-  if (!selected.length) return `Não há feriados nacionais na base verificada entre ${prettyDate(start)} e ${prettyDate(end)}. Feriados locais não estão incluídos.`;
+  if (!selected.length) return `Não há feriados nacionais confirmados entre ${prettyDate(start)} e ${prettyDate(end)}. Feriados locais não estão incluídos.`;
   const header = !plural && count === 1
     ? "O próximo feriado nacional no Brasil é"
     : hasPeriod ? `Feriados nacionais no Brasil entre ${prettyDate(start)} e ${prettyDate(end)}:` : `Os ${selected.length} próximos feriados nacionais no Brasil são:`;
   const lines = selected.map(h => `${h.name} — ${prettyDate(h.date)}, ${weekday(h.date)}`);
   const futureCoverage = selected.some(h => Number(h.date.slice(0, 4)) !== 2026)
-    ? "\nNos anos sem calendário federal anual verificado, a lista cobre somente feriados nacionais fixados em lei federal; feriados religiosos locais não estão incluídos." : "";
+    ? "\nNos anos seguintes, a lista inclui somente feriados nacionais fixos; feriados locais e pontos facultativos não estão incluídos." : "";
   const sources = [...new Set(selected.map(h => h.source))];
-  return `${header}${selected.length === 1 && !plural ? " " : "\n"}${lines.join("\n")}.${futureCoverage}\nFonte${sources.length > 1 ? "s" : ""}: ${sources.join("\n")}`;
+  const sourceSuffix = sourceRequested ? `\nFonte${sources.length > 1 ? "s" : ""}: ${sources.join("\n")}` : "";
+  return `${header}${selected.length === 1 && !plural ? " " : "\n"}${lines.join("\n")}.${futureCoverage}${sourceSuffix}`;
 }
